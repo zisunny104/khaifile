@@ -38,6 +38,9 @@ with tempfile.TemporaryDirectory(prefix='khaifile-system-') as temporary:
         return execute('log="$4"\nsystemctl() { echo "$*" >> "$log"; }\nconfigure_fpm "$1" "$2" "$3"',
                        fpm, php, stub, base / 'reloads')
 
+    result = execute('! supported_php_version 7.4 && ! supported_php_version 8.1 && supported_php_version 8.2 && supported_php_version 8.4')
+    check(result.returncode == 0, 'Legacy FPM versions are excluded before host changes')
+
     ini = fpm / 'php.ini'
     ini.write_text('upload_max_filesize=2M\npost_max_size=8M\nmax_execution_time=30\n')
     result = configure()

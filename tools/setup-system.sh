@@ -2,6 +2,11 @@
 # KhaiFile 的 Debian／Ubuntu 主機設定；由 deploy.sh 呼叫。
 set -euo pipefail
 
+supported_php_version() {
+    [[ "$1" =~ ^([0-9]+)\.([0-9]+)$ ]] &&
+        (( BASH_REMATCH[1] > 8 || (BASH_REMATCH[1] == 8 && BASH_REMATCH[2] >= 2) ))
+}
+
 write_managed() {
     local destination="$1" mode="$2" temporary
     [[ ! -L "$destination" ]] || { echo "拒絕寫入符號連結：$destination" >&2; return 1; }
@@ -26,7 +31,7 @@ configure_fpm() {
     temporary="$(mktemp)"
     # 使用該版本 PHP 的現有 FPM ini；不得降低其他工具已設定的上限。
     if ! PHP_INI_SCAN_DIR="$directory/conf.d" "$binary" -c "$directory/php.ini" -r '
-        function size($s) { $s=trim($s); $n=(float)$s; return $n * match(strtolower(substr($s,-1))) {"g"=>1073741824,"m"=>1048576,"k"=>1024,default=>1}; }
+        function size($s) { $s=trim($s); $factors=["g"=>1073741824,"m"=>1048576,"k"=>1024]; return (float)$s * ($factors[strtolower(substr($s,-1))] ?? 1); }
         $settings=parse_ini_file(php_ini_loaded_file(),false,INI_SCANNER_RAW) ?: [];
         foreach (explode(",",php_ini_scanned_files() ?: "") as $file) {
             if (trim($file)!=="") $settings=array_replace($settings,parse_ini_file(trim($file),false,INI_SCANNER_RAW) ?: []);
@@ -77,13 +82,17 @@ setup_main() {
         version="$(basename "$(dirname "$directory")")"
         # 只修改正在使用的 FPM 版本，保留其他版本設定。
         systemctl is-active --quiet "php$version-fpm" || continue
+        if ! supported_php_version "$version"; then
+            echo "  ! 保留 php$version-fpm：KhaiFile 需要 PHP-FPM 8.2+，不修改舊版服務"
+            continue
+        fi
         fpm_dirs+=("$directory")
         binary="/usr/bin/php$version"
         [[ -x "$binary" ]] || packages+=("php$version-cli")
         dpkg-query -W -f='${Status}' "php$version-zip" 2>/dev/null | grep -q 'install ok installed' || packages+=("php$version-zip")
         dpkg-query -W -f='${Status}' "php$version-mbstring" 2>/dev/null | grep -q 'install ok installed' || packages+=("php$version-mbstring")
     done
-    [[ ${#fpm_dirs[@]} -gt 0 ]] || { echo '沒有啟動中的 PHP-FPM；未變更系統。其他 PHP 服務請設定 DEPLOY_SETUP_SYSTEM=0。' >&2; return 1; }
+    [[ ${#fpm_dirs[@]} -gt 0 ]] || { echo '找不到啟動中的 PHP-FPM 8.2+；未變更系統。請確認此網站的 FPM 版本，PHP CLI 版本不代表網站版本。' >&2; return 1; }
     user="${DEPLOY_PHP_USER:-}"
     if [[ -z "$user" ]]; then
         shopt -s nullglob
