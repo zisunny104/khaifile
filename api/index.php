@@ -14,12 +14,12 @@ try {
     [$base, $ownerDir, $ownerLock] = kf_storage($config, $owner);
     switch ($api) {
         case 'process':
-            kf_json(['job'=>kf_public(kf_process($ownerDir, $base, $config))]);
+            kf_json(['job'=>kf_public(kf_process($ownerDir, $base, $config), $config)]);
         case 'rename':
             $manifest = kf_manifest($ownerDir, $_POST['id'] ?? null, $config);
             $manifest['name'] = kf_name($_POST['name'] ?? null);
             kf_save($ownerDir.'/'.$manifest['id'], $manifest);
-            kf_json(['job'=>kf_public($manifest)]);
+            kf_json(['job'=>kf_public($manifest, $config)]);
         case 'archive':
             $ids = $_POST['ids'] ?? null;
             if (!is_array($ids) || array_filter($ids, fn($id) => !is_string($id))) throw new KfError('請選擇要下載的檔案。');

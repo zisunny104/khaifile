@@ -88,13 +88,13 @@ function kf_save(string $dir, array $manifest): void
     file_put_contents($dir . '/manifest.json', json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), LOCK_EX);
 }
 
-function kf_public(array $manifest): array
+function kf_public(array $manifest, array $config): array
 {
     $outputs = [];
     foreach ($manifest['outputs'] as $id => $file) {
         $outputs[] = ['id' => $id, 'name' => $manifest['name'] . '.' . $file['ext'], 'label' => $file['label'], 'size' => $file['size']];
     }
-    return ['id' => $manifest['id'], 'name' => $manifest['name'], 'outputs' => $outputs, 'notes' => $manifest['notes'], 'expires' => $manifest['created'] + 3600];
+    return ['id' => $manifest['id'], 'name' => $manifest['name'], 'outputs' => $outputs, 'notes' => $manifest['notes'], 'expires' => $manifest['created'] + $config['ttl']];
 }
 
 function kf_path(): string
