@@ -17,6 +17,21 @@ warn() { echo "  ${YELLOW}!${RESET} $1"; }
 fail() { echo "  ${RED}✗${RESET} $1"; }
 
 abort() { fail "$1"; exit 1; }
+run_logged() {
+    local label="$1" logfile status
+    shift
+    logfile="$(mktemp)"
+    if "$@" > "$logfile" 2>&1; then
+        rm -f "$logfile"
+        ok "$label"
+    else
+        status=$?
+        fail "$label"
+        sed 's/^/    /' "$logfile" >&2
+        rm -f "$logfile"
+        exit "$status"
+    fi
+}
 url_file=.deploy_check_url
 check_only=0
 deps_only=0
@@ -35,7 +50,7 @@ while [[ $# -gt 0 ]]; do
             valid_url "$2" || abort '請提供不含帳密、查詢參數的 http(s) 網站網址。'
             printf '%s\n' "${2%/}" > "$url_file"
             chmod 600 "$url_file"
-            printf '已儲存網站檢查網址。\n'
+            ok '已儲存網站檢查網址'
             exit 0 ;;
         -h|--help)
             cat <<'HELP'
@@ -61,7 +76,7 @@ done
 if [[ "$deps_only" -eq 1 ]]; then
     step '檢查執行期依賴'
     command -v php >/dev/null || abort '需要 PHP CLI 8.2+。'
-    php tools/deps.php
+    run_logged 'PHP、轉換工具與暫存目錄正常' php tools/deps.php
     exit 0
 fi
 
@@ -70,7 +85,7 @@ selfcheck() {
     base="${DEPLOY_CHECK_URL:-}"
     if [[ -z "$base" && -f "$url_file" ]]; then IFS= read -r base < "$url_file" || true; fi
     if [[ -z "$base" ]]; then
-        printf '未設定檢查網址：未驗證網站可用性。請使用 --set-check-url URL。\n'
+        warn '未設定網址，網站尚未驗證（使用 --set-check-url URL）'
         return 0
     fi
     valid_url "$base" || abort '檢查網址無效。'
@@ -92,7 +107,7 @@ selfcheck() {
     done
     code="$(curl --silent --show-error --max-time 8 --output /dev/null --write-out '%{http_code}' "$asset_base/vendor/tocas/tocas.min.css")" || abort 'Tocas UI 資源無法連線。'
     [[ "$code" == 200 ]] || abort 'Tocas UI 資源未正確供應。'
-    printf '網站、第一方 Tocas UI 與內部路徑拒絕檢查通過。\n'
+    ok '網站、資源與私有路徑保護正常'
 }
 
 rg_or_grep() {
@@ -101,16 +116,14 @@ rg_or_grep() {
 
 if [[ "$check_only" -eq 1 ]]; then
     command -v php >/dev/null || abort '需要 PHP CLI 8.2+。'
-    step '檢查執行期依賴'
-    php tools/deps.php
-    step '檢查目前程式語法'
-    php tools/check.php
-    step '網站檢查'
+    step '檢查部署狀態'
+    run_logged 'PHP、轉換工具與暫存目錄正常' php tools/deps.php
+    run_logged '程式語法正常' php tools/check.php
     selfcheck
     exit 0
 fi
 
-step '檢查 working tree'
+step '檢查部署環境'
 command -v git >/dev/null || abort '需要 Git。'
 git rev-parse --verify HEAD >/dev/null 2>&1 || abort '尚無提交，請先建立初始 commit。'
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || abort '有尚未提交的修改，部署已中止。'
@@ -122,13 +135,14 @@ current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
 ok '沒有未 commit 的修改'
 command -v php >/dev/null || abort '需要 PHP CLI 8.2+。'
 php -r 'exit(PHP_VERSION_ID>=80200?0:1);' || abort '需要 PHP CLI 8.2+。'
+ok "PHP $(php -r 'echo PHP_VERSION;')"
 
-step 'Fetch 最新程式碼'
-git fetch origin "refs/heads/$branch"
+step '更新程式'
+run_logged '已取得遠端版本' git fetch origin "refs/heads/$branch"
 target="$(git rev-parse --verify 'FETCH_HEAD^{commit}')"
+before="$(git rev-parse --short HEAD)"
 git merge-base --is-ancestor HEAD "$target" || abort '本機與遠端已分歧，不能 fast-forward。'
 
-step '驗證遠端 PHP 語法'
 syntax_dir="$(mktemp -d)"
 trap 'rm -rf -- "$syntax_dir"' EXIT
 while IFS= read -r -d '' path; do
@@ -137,33 +151,32 @@ while IFS= read -r -d '' path; do
         php -l "$syntax_dir/check.php" >/dev/null || abort "遠端 PHP 語法錯誤：$path"
     fi
 done < <(git ls-tree -r -z --name-only "$target")
+ok '遠端 PHP 語法正常'
 
-step '更新程式碼'
-git merge --ff-only "$target"
+if [[ "$(git rev-parse HEAD)" == "$target" ]]; then
+    ok "已是最新版本（$before）"
+else
+    run_logged "已更新 $before → $(git rev-parse --short "$target")" git merge --ff-only "$target"
+fi
+step '執行環境'
 if [[ "${DEPLOY_SETUP_SYSTEM:-1}" == 1 ]]; then
-    step '設定 KhaiFile 執行環境'
     if [[ "$(id -u)" == 0 ]]; then
-        bash tools/setup-system.sh
+        run_logged 'PHP-FPM、轉換工具與清理排程已就緒' bash tools/setup-system.sh
     else
         command -v sudo >/dev/null || abort '首次系統設定需要 sudo；已備妥環境可設 DEPLOY_SETUP_SYSTEM=0。'
-        sudo env DEPLOY_PHP_USER="${DEPLOY_PHP_USER:-}" DEPLOY_FPM_CONFIG="${DEPLOY_FPM_CONFIG:-}" DEPLOY_NGINX_SITE="${DEPLOY_NGINX_SITE:-}" KHAIFILE_TEMP_DIR="${KHAIFILE_TEMP_DIR:-}" \
+        run_logged 'PHP-FPM、轉換工具與清理排程已就緒' sudo env DEPLOY_PHP_USER="${DEPLOY_PHP_USER:-}" DEPLOY_FPM_CONFIG="${DEPLOY_FPM_CONFIG:-}" DEPLOY_NGINX_SITE="${DEPLOY_NGINX_SITE:-}" KHAIFILE_TEMP_DIR="${KHAIFILE_TEMP_DIR:-}" \
             bash "$PWD/tools/setup-system.sh"
     fi
 else
     warn '已略過系統設定（DEPLOY_SETUP_SYSTEM=0）'
-    step '檢查執行期依賴'
-    php tools/deps.php
+    run_logged 'PHP、轉換工具與暫存目錄正常' php tools/deps.php
 fi
 # 系統設定已用實際 PHP 身分檢查依賴；部署帳號不需取得私人暫存寫入權限。
-php tools/check.php
+run_logged '程式語法正常' php tools/check.php
 if [[ -n "${DEPLOY_RELOAD_CMD:-}" ]]; then
-    step '執行設定的服務重載指令'
-    bash -lc "$DEPLOY_RELOAD_CMD"
+    run_logged '服務已重載' bash -lc "$DEPLOY_RELOAD_CMD"
 fi
 step '網站檢查'
 selfcheck
-step '部署完成'
 VERSION="$(php -r '$c=require "config.php"; echo $c["version"]??"?";')"
-echo "  應用版本：${BOLD}v${VERSION}${RESET}"
-echo "  目前 commit：${BOLD}$(git rev-parse --short HEAD)${RESET}"
-echo "  完成時間：${DIM}$(date '+%Y-%m-%d %H:%M:%S')${RESET}"
+echo "${GREEN}${BOLD}✓ 部署完成${RESET}  KhaiFile v${VERSION} · $(git rev-parse --short HEAD)"

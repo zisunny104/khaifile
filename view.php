@@ -16,7 +16,7 @@ $e = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     <script src="<?= $e($assetBase) ?>/vendor/tocas/tocas.min.js" defer></script>
     <script src="<?= $e($assetBase) ?>/assets/app.js" type="module"></script>
 </head>
-<body class="is-rounded">
+<body id="khaifile-page" class="is-rounded">
 <a href="#main" class="skip-link">跳到主要內容</a>
 <main id="main" class="main-content ts-container has-vertically-padded">
     <?php require __DIR__ . '/partials/header.php'; ?>
@@ -76,7 +76,7 @@ $e = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     </details>
 </main>
 <?php require __DIR__ . '/partials/footer.php'; ?>
-<dialog id="license-dialog" class="license-dialog"><div class="ts-content"><h2 class="ts-header is-large">授權</h2><p>KhaiFile 採 MIT License。Tocas UI 採 MIT License；伺服器部署的 LibreOffice、Ghostscript 與字型依各自授權使用。</p><pre id="license-text"></pre><form method="dialog"><button class="ts-button">關閉</button></form></div></dialog>
+<dialog id="license-dialog" class="app-dialog" aria-labelledby="license-dialog-title"><div class="ts-content"><h2 id="license-dialog-title" class="ts-header is-large">授權</h2><p>KhaiFile 採 MIT License。Tocas UI 採 MIT License；伺服器部署的 LibreOffice、Ghostscript 與字型依各自授權使用。</p><pre id="license-text"></pre><form method="dialog"><button class="ts-button">關閉</button></form></div></dialog>
 <script id="app-data" type="application/json"><?= json_encode(['csrf'=>$csrf,'assetBase'=>$assetBase,'maxFileBytes'=>$config['max_file_bytes'],'maxSessionBytes'=>$config['max_session_bytes'],'maxJobs'=>$config['max_jobs']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </body>
 </html>
