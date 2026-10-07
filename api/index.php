@@ -14,7 +14,6 @@ try {
     [$base, $ownerDir, $ownerLock] = kf_storage($config, $owner);
     switch ($api) {
         case 'process':
-            kf_throttle($ownerDir, 'process', 2.0);
             kf_json(['job'=>kf_public(kf_process($ownerDir, $base, $config), $config)]);
         case 'rename':
             $manifest = kf_manifest($ownerDir, $_POST['id'] ?? null, $config);
@@ -22,7 +21,6 @@ try {
             kf_save($ownerDir.'/'.$manifest['id'], $manifest);
             kf_json(['job'=>kf_public($manifest, $config)]);
         case 'archive':
-            kf_throttle($ownerDir, 'archive', 2.0);
             $ids = $_POST['ids'] ?? null;
             if (!is_array($ids) || array_filter($ids, fn($id) => !is_string($id))) throw new KfError('請選擇要下載的檔案。');
             kf_json(kf_archive($ownerDir, $ids, $config));

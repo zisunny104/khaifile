@@ -11,6 +11,8 @@
 | Font Awesome Free 6.7.2 | 字型 SIL OFL 1.1；CSS／程式碼 MIT | 由 TTF metadata 確認版本，保留該版本完整授權檔 |
 | LibreOffice | MPL 2.0，加上各內嵌第三方條款 | 獨立 CLI 安裝，未複製到本儲存庫 |
 | Ghostscript 10.05.1（驗證機套件） | AGPL-3.0-or-later | 獨立 CLI 安裝，未複製到本儲存庫 |
+| Bubblewrap | LGPL-2.1-or-later | 由系統套件安裝，未複製到本儲存庫 |
+| util-linux（prlimit） | 依套件各元件授權 | 由系統套件安裝，未複製到本儲存庫 |
 | Noto CJK（建議字型） | SIL OFL 1.1 | 由系統套件安裝；本儲存庫不散布 |
 
 ## 本儲存庫的散布

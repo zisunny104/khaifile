@@ -130,4 +130,13 @@ configure_custom_fpm'''
     result = execute('export TEST_NGINX_EXIT=1\n' + body, site)
     check(result.returncode != 0 and site.read_text() == original, 'Invalid Nginx configuration is restored without reload')
 
+    result = execute('render_nginx_ratelimit')
+    import re
+    pattern = re.search(r'"~([^"\n]+)" \$binary_remote_addr', result.stdout).group(1)
+    check('$request_uri' in result.stdout and re.search(pattern, '1:/koilisu/khaifile?api=process') is not None,
+          'Rate limit uses original request URI and covers the public tool entry')
+    check(re.search(pattern, '1:/koilisu/apps/khaifile/index.php?api=archive') is not None
+          and re.search(pattern, '1:/koilisu/printan?api=process') is None,
+          'Rate limit covers direct entry without affecting other projects')
+
 print(f'PASS {passed} system configuration checks (no real system changes)')

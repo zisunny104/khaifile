@@ -8,7 +8,9 @@ function check(bool $condition, string $message): void {
     $passed++;
 }
 $dir = sys_get_temp_dir() . '/khaifile-unit-' . bin2hex(random_bytes(8));
-mkdir($dir, 0700);
+$root = $dir;
+$dir .= '/' . str_repeat('e',32);
+mkdir($dir, 0700, true);
 try {
     check(kf_name('報告 2026') === '報告 2026', 'Unicode filename must remain unchanged');
     check(!str_contains(kf_name('../../report'), '/'), 'Filename traversal must be removed');
@@ -59,4 +61,4 @@ try {
     $process = proc_open([PHP_BINARY, dirname(__DIR__).'/tools/cleanup.php'], [1=>['file','/dev/null','w'],2=>STDERR], $pipes, null, $environment);
     check(proc_close($process) === 0 && !is_dir($oldJob), 'Cleanup removes expired files after request completes');
     echo "PASS $passed backend checks\n";
-} finally { kf_remove($dir); }
+} finally { kf_remove($root); }

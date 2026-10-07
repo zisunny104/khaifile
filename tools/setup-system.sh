@@ -171,6 +171,22 @@ NGINX
     echo '  ✓ 已阻擋 KhaiFile 私有路徑，保留其他網站規則'
 }
 
+render_nginx_ratelimit() {
+    cat <<'NGINX'
+# KhaiFile managed
+map $arg_api $khaifile_action_limited {
+    default 0;
+    process 1;
+    archive 1;
+}
+map "$khaifile_action_limited:$request_uri" $khaifile_heavy_key {
+    default "";
+    "~^1:/koilisu/(?:apps/)?khaifile(?:/|[?]|$)" $binary_remote_addr;
+}
+limit_req_zone $khaifile_heavy_key zone=khaifile_heavy:10m rate=120r/m;
+NGINX
+}
+
 configure_nginx_ratelimit() {
     local site="$1" temporary previous dropin dropin_previous dropin_existed count
     site="$(realpath "$site")"
@@ -182,19 +198,7 @@ configure_nginx_ratelimit() {
         || { echo '找不到 /etc/nginx/conf.d 自動載入設定，未套用限速規則。' >&2; return 1; }
     dropin_previous="$(mktemp)"
     if [[ -e "$dropin" ]]; then dropin_existed=1; cp -p "$dropin" "$dropin_previous"; else dropin_existed=0; fi
-    cat <<'NGINX' | write_managed "$dropin" 644 || { rm -f "$dropin_previous"; return 1; }
-# KhaiFile managed
-map $arg_api $khaifile_action_limited {
-    default 0;
-    process 1;
-    archive 1;
-}
-map "$khaifile_action_limited:$uri" $khaifile_heavy_key {
-    default "";
-    "~^1:/koilisu/apps/khaifile/" $binary_remote_addr;
-}
-limit_req_zone $khaifile_heavy_key zone=khaifile_heavy:10m rate=20r/m;
-NGINX
+    render_nginx_ratelimit | write_managed "$dropin" 644 || { rm -f "$dropin_previous"; return 1; }
     temporary="$(mktemp "$(dirname "$site")/.khaifile.XXXXXX")"
     previous="$(mktemp)"
     cp -p "$site" "$previous"
@@ -206,7 +210,8 @@ NGINX
             print
             if ($0 ~ /^[[:space:]]*location \/koilisu\/[[:space:]]*\{/) {
                 print "        # BEGIN KhaiFile ratelimit managed"
-                print "        limit_req zone=khaifile_heavy burst=5 nodelay;"
+                print "        limit_req zone=khaifile_heavy burst=10 nodelay;"
+                print "        limit_req_status 429;"
                 print "        # END KhaiFile ratelimit managed"
             }
         }
@@ -249,6 +254,8 @@ setup_main() {
     done
     command -v gs >/dev/null || packages+=(ghostscript)
     command -v timeout >/dev/null || packages+=(coreutils)
+    command -v bwrap >/dev/null || packages+=(bubblewrap)
+    command -v prlimit >/dev/null || packages+=(util-linux)
     command -v curl >/dev/null || packages+=(curl)
     command -v fc-match >/dev/null || packages+=(fontconfig)
     dpkg-query -W -f='${Status}' fonts-noto-cjk 2>/dev/null | grep -q 'install ok installed' || packages+=(fonts-noto-cjk)

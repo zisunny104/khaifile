@@ -239,6 +239,7 @@ def main():
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
         env = os.environ.copy()
+        env['KHAIFILE_ALLOW_UNSANDBOXED'] = '1'  # 功能測試不驗證核心命名空間隔離。
         env['KHAIFILE_TEMP_DIR'] = str(directory / 'storage')
         log = open(directory / 'server.log', 'w')
         process = subprocess.Popen([shutil.which('php'), '-d', 'upload_max_filesize=50M', '-d', 'post_max_size=52M', '-d', 'max_execution_time=300', '-S', f'127.0.0.1:{port}', '-t', str(ROOT), str(ROOT / 'tools/router.php')], env=env, stdout=log, stderr=log)
