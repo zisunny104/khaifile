@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
 正常部署會補齊 Debian／Ubuntu 依賴、PHP-FPM 限制與清理排程（需要 root／sudo）。
 DEPLOY_SETUP_SYSTEM=0 可略過；DEPLOY_PHP_USER 可指定網站 PHP 帳號。
 會偵測 /opt 下運行中的自編 FPM；多個版本可用 DEPLOY_FPM_CONFIG 指定。
-DEPLOY_NGINX_SITE 可指定既有開利手網站設定，只加入 KhaiFile 私有路徑拒絕規則。
+DEPLOY_NGINX_SITE 可指定既有開利手網站設定，加入 KhaiFile 私有路徑拒絕規則與限速。
 --check-only／--check-deps 不修改系統。不會更新其他工具；未指定網站設定不修改 Nginx。
 HELP
             exit 0 ;;

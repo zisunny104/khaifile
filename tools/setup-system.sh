@@ -171,6 +171,62 @@ NGINX
     echo '  ✓ 已阻擋 KhaiFile 私有路徑，保留其他網站規則'
 }
 
+configure_nginx_ratelimit() {
+    local site="$1" temporary previous dropin dropin_previous dropin_existed count
+    site="$(realpath "$site")"
+    [[ -f "$site" ]] || { echo '找不到指定的 Nginx 網站設定。' >&2; return 1; }
+    count="$(grep -cE '^[[:space:]]*location /koilisu/[[:space:]]*\{' "$site" || true)"
+    [[ "$count" == 1 ]] || { echo '網站設定須有唯一的 location /koilisu/，未套用限速規則。' >&2; return 1; }
+    dropin=/etc/nginx/conf.d/khaifile-ratelimit.conf
+    grep -qE '^[[:space:]]*include[[:space:]]+/etc/nginx/conf\.d/\*\.conf;' /etc/nginx/nginx.conf 2>/dev/null \
+        || { echo '找不到 /etc/nginx/conf.d 自動載入設定，未套用限速規則。' >&2; return 1; }
+    dropin_previous="$(mktemp)"
+    if [[ -e "$dropin" ]]; then dropin_existed=1; cp -p "$dropin" "$dropin_previous"; else dropin_existed=0; fi
+    cat <<'NGINX' | write_managed "$dropin" 644 || { rm -f "$dropin_previous"; return 1; }
+# KhaiFile managed
+map $arg_api $khaifile_action_limited {
+    default 0;
+    process 1;
+    archive 1;
+}
+map "$khaifile_action_limited:$uri" $khaifile_heavy_key {
+    default "";
+    "~^1:/koilisu/apps/khaifile/" $binary_remote_addr;
+}
+limit_req_zone $khaifile_heavy_key zone=khaifile_heavy:10m rate=20r/m;
+NGINX
+    temporary="$(mktemp "$(dirname "$site")/.khaifile.XXXXXX")"
+    previous="$(mktemp)"
+    cp -p "$site" "$previous"
+    [[ -e "$site.khaifile-backup" ]] || cp -p "$site" "$site.khaifile-backup"
+    awk '
+        /# BEGIN KhaiFile ratelimit managed$/ {skip=1;next}
+        /# END KhaiFile ratelimit managed$/ {skip=0;next}
+        !skip {
+            print
+            if ($0 ~ /^[[:space:]]*location \/koilisu\/[[:space:]]*\{/) {
+                print "        # BEGIN KhaiFile ratelimit managed"
+                print "        limit_req zone=khaifile_heavy burst=5 nodelay;"
+                print "        # END KhaiFile ratelimit managed"
+            }
+        }
+    ' "$site" > "$temporary"
+    chmod --reference="$site" "$temporary"
+    chown --reference="$site" "$temporary"
+    if cmp -s "$temporary" "$site"; then rm -f "$temporary"; else mv -f "$temporary" "$site"; fi
+    if ! nginx -t; then
+        cp -p "$previous" "$site"
+        rm -f "$previous"
+        if [[ "$dropin_existed" == 1 ]]; then cp -p "$dropin_previous" "$dropin"; else rm -f "$dropin"; fi
+        rm -f "$dropin_previous"
+        echo 'Nginx 設定檢查失敗，已還原，未重載。' >&2
+        return 1
+    fi
+    rm -f "$previous" "$dropin_previous"
+    systemctl reload nginx
+    echo '  ✓ 已為 process／archive 設定限速規則'
+}
+
 setup_main() {
     [[ "$(id -u)" == 0 ]] || { echo '主機設定需要 root／sudo。' >&2; return 1; }
     cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -258,7 +314,7 @@ setup_main() {
         configure_fpm "$directory" "/usr/bin/php$version"
     done
     if [[ -n "$CUSTOM_PID" ]]; then configure_custom_fpm; fi
-    if [[ -n "${DEPLOY_NGINX_SITE:-}" ]]; then configure_nginx_site "$DEPLOY_NGINX_SITE"; fi
+    if [[ -n "${DEPLOY_NGINX_SITE:-}" ]]; then configure_nginx_site "$DEPLOY_NGINX_SITE"; configure_nginx_ratelimit "$DEPLOY_NGINX_SITE"; fi
     install -d -m 755 /etc/cron.d
     # cron 使用 POSIX shell；單引號與百分號必須正確處理。
     local quoted_project quoted_temp php_path
