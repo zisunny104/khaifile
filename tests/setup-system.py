@@ -78,4 +78,38 @@ with tempfile.TemporaryDirectory(prefix='khaifile-system-') as temporary:
     result = execute('echo overwritten | write_managed "$1" 644', link)
     check(result.returncode != 0 and cron.read_text().startswith('# KhaiFile managed'), 'Symlink destinations cannot overwrite other files')
 
+    custom_ini = base / 'custom.ini'
+    custom_ini.write_text('; existing custom PHP config\nupload_max_filesize=200M\n')
+    custom_fpm = base / 'custom-fpm'
+    custom_fpm.write_text('#!/bin/sh\nif [ "$1" = -i ]; then\ncat <<EOF\n'
+                          f'Loaded Configuration File => {custom_ini}\n'
+                          'Scan this dir for additional .ini files => (none)\n'
+                          'upload_max_filesize => 200M => 200M\n'
+                          'post_max_size => 8M => 8M\n'
+                          'max_execution_time => 30 => 30\nEOF\n'
+                          'else exit "${TEST_FPM_EXIT:-0}"; fi\n')
+    custom_fpm.chmod(0o755)
+    body = '''CUSTOM_BIN="$1"; CUSTOM_CONFIG="$2"; CUSTOM_PID=123
+readlink() { echo "$CUSTOM_BIN"; }
+kill() { echo "$*" >> "$2"; }
+configure_custom_fpm'''
+    # Capture the reload signal without signaling any real process.
+    body = body.replace('kill() { echo "$*" >> "$2"; }', 'kill() { echo "$*" > "${CUSTOM_CONFIG}.signal"; }')
+    result = execute(body, custom_fpm, base / 'php-fpm83.conf')
+    contents = custom_ini.read_text()
+    check(result.returncode == 0 and 'upload_max_filesize = 200M' in contents
+          and 'post_max_size = 52M' in contents and 'max_execution_time = 300' in contents
+          and (base / 'php-fpm83.conf.signal').read_text().strip() == '-USR2 123',
+          'Custom FPM updates actual ini and gracefully reloads only its master')
+    before = custom_ini.stat().st_mtime_ns
+    result = execute(body, custom_fpm, base / 'php-fpm83.conf')
+    check(result.returncode == 0 and custom_ini.stat().st_mtime_ns == before
+          and custom_ini.read_text().count('; BEGIN KhaiFile managed') == 1,
+          'Custom ini setup is repeatable and preserves existing content')
+    custom_ini.write_text('; operator changed current settings\nupload_max_filesize=300M\n')
+    before = custom_ini.read_bytes()
+    result = execute('export TEST_FPM_EXIT=1\n' + body, custom_fpm, base / 'php-fpm83.conf')
+    check(result.returncode != 0 and custom_ini.read_bytes() == before,
+          'Failed custom FPM validation restores settings from this run')
+
 print(f'PASS {passed} system configuration checks (no real system changes)')

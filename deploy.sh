@@ -48,6 +48,7 @@ while [[ $# -gt 0 ]]; do
 工具路徑：KHAIFILE_OFFICE_BIN、KHAIFILE_GS_BIN、KHAIFILE_TEMP_DIR。
 正常部署會補齊 Debian／Ubuntu 依賴、PHP-FPM 限制與清理排程（需要 root／sudo）。
 DEPLOY_SETUP_SYSTEM=0 可略過；DEPLOY_PHP_USER 可指定網站 PHP 帳號。
+會偵測 /opt 下運行中的自編 FPM；多個版本可用 DEPLOY_FPM_CONFIG 指定。
 --check-only／--check-deps 不修改系統。不會更新其他工具或修改 Nginx。
 HELP
             exit 0 ;;
@@ -144,7 +145,7 @@ if [[ "${DEPLOY_SETUP_SYSTEM:-1}" == 1 ]]; then
         bash tools/setup-system.sh
     else
         command -v sudo >/dev/null || abort '首次系統設定需要 sudo；已備妥環境可設 DEPLOY_SETUP_SYSTEM=0。'
-        sudo env DEPLOY_PHP_USER="${DEPLOY_PHP_USER:-}" KHAIFILE_TEMP_DIR="${KHAIFILE_TEMP_DIR:-}" \
+        sudo env DEPLOY_PHP_USER="${DEPLOY_PHP_USER:-}" DEPLOY_FPM_CONFIG="${DEPLOY_FPM_CONFIG:-}" KHAIFILE_TEMP_DIR="${KHAIFILE_TEMP_DIR:-}" \
             bash "$PWD/tools/setup-system.sh"
     fi
 else

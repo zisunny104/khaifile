@@ -58,15 +58,93 @@ configure_fpm() {
     echo "  ✓ $service 上傳至少 50 MB、請求至少 52 MB、逾時至少 300 秒"
 }
 
+discover_custom_fpm() {
+    local pid args binary version config
+    CUSTOM_PID= CUSTOM_BIN= CUSTOM_CONFIG=
+    while read -r pid args; do
+        [[ "$args" =~ ^php-fpm:\ master\ process\ \((.*)\)$ ]] || continue
+        config="${BASH_REMATCH[1]}"
+        [[ "$config" == /opt/* || -n "${DEPLOY_FPM_CONFIG:-}" ]] || continue
+        [[ -z "${DEPLOY_FPM_CONFIG:-}" || "$config" == "$DEPLOY_FPM_CONFIG" ]] || continue
+        binary="$(readlink -f "/proc/$pid/exe")"
+        [[ -x "$binary" && -f "$config" ]] || continue
+        version="$("$binary" -v 2>/dev/null | sed -n 's/^PHP \([0-9]*\.[0-9]*\).*/\1/p' | head -n 1)"
+        supported_php_version "$version" || continue
+        [[ -z "$CUSTOM_PID" ]] || { echo '有多個自編 FPM，請以 DEPLOY_FPM_CONFIG 指定網站使用的設定檔。' >&2; return 1; }
+        CUSTOM_PID="$pid" CUSTOM_BIN="$binary" CUSTOM_CONFIG="$config"
+    done < <(ps -eo pid=,args=)
+}
+
+custom_limits() {
+    # FPM -i 的有效設定；只取三項，不輸出環境變數或其他主機資訊。
+    local info="$1" upload post seconds
+    upload="$(printf '%s\n' "$info" | awk -F' => ' '$1=="upload_max_filesize" {print $2;exit}')"
+    post="$(printf '%s\n' "$info" | awk -F' => ' '$1=="post_max_size" {print $2;exit}')"
+    seconds="$(printf '%s\n' "$info" | awk -F' => ' '$1=="max_execution_time" {print $2;exit}')"
+    [[ -n "$upload" && -n "$post" && -n "$seconds" ]] || { echo '無法讀取自編 FPM 的 PHP 限制。' >&2; return 1; }
+    php -r '
+        function bytes($s) { $f=["g"=>1073741824,"m"=>1048576,"k"=>1024]; return (float)$s*($f[strtolower(substr(trim($s),-1))]??1); }
+        echo "; KhaiFile managed\n";
+        echo "upload_max_filesize = ".(bytes($argv[1])>=52428800?$argv[1]:"50M")."\n";
+        echo "post_max_size = ".(bytes($argv[2])==0||bytes($argv[2])>=54525952?$argv[2]:"52M")."\n";
+        echo "max_execution_time = ".((int)$argv[3]==0||(int)$argv[3]>=300?$argv[3]:"300")."\n";
+    ' "$upload" "$post" "$seconds"
+}
+
+configure_custom_fpm() {
+    local info ini scan contents temporary backup destination restore
+    info="$("$CUSTOM_BIN" -i)"
+    ini="$(printf '%s\n' "$info" | sed -n 's/^Loaded Configuration File => //p' | head -n 1)"
+    scan="$(printf '%s\n' "$info" | sed -n 's/^Scan this dir for additional .ini files => //p' | head -n 1)"
+    contents="$(custom_limits "$info")"
+    if [[ "$scan" == /* && -d "$scan" ]]; then
+        destination="$scan/99-khaifile.ini"
+        restore="$(mktemp)"
+        if [[ -f "$destination" ]]; then cp -p "$destination" "$restore"; else rm -f "$restore"; fi
+        printf '%s\n' "$contents" | write_managed "$destination" 644
+    else
+        [[ "$ini" == /* && -f "$ini" && ! -L "$ini" ]] || { echo '自編 FPM 沒有可寫入的 php.ini 或掃描目錄。' >&2; return 1; }
+        # 保留原檔，只更新自有區塊；備份只建立一次。
+        backup="$ini.khaifile-backup"
+        [[ -e "$backup" ]] || cp -p "$ini" "$backup"
+        destination="$ini"
+        restore="$(mktemp)"
+        cp -p "$ini" "$restore"
+        temporary="$(mktemp "$(dirname "$ini")/.khaifile.XXXXXX")"
+        awk '/^; BEGIN KhaiFile managed$/ {skip=1;next} /^; END KhaiFile managed$/ {skip=0;next} !skip {if ($0=="") {blanks++;next} while(blanks>0) {print "";blanks--} print}' "$ini" > "$temporary"
+        printf '; BEGIN KhaiFile managed\n%s\n; END KhaiFile managed\n' "$contents" >> "$temporary"
+        chmod --reference="$ini" "$temporary"
+        chown --reference="$ini" "$temporary"
+        if cmp -s "$temporary" "$ini"; then rm -f "$temporary"; else mv "$temporary" "$ini"; fi
+    fi
+    if ! "$CUSTOM_BIN" -t -y "$CUSTOM_CONFIG"; then
+        if [[ -f "$restore" ]]; then cp -p "$restore" "$destination"; else rm -f "$destination"; fi
+        rm -f "$restore"
+        echo '自編 FPM 設定檢查未通過，已還原本次變更，未重載。' >&2
+        return 1
+    fi
+    rm -f "$restore"
+    [[ "$(readlink -f "/proc/$CUSTOM_PID/exe")" == "$CUSTOM_BIN" ]] || { echo 'FPM 程序已變更，未重載。' >&2; return 1; }
+    kill -USR2 "$CUSTOM_PID"
+    echo "  ✓ 已設定並平滑重載自編 PHP-FPM：$CUSTOM_CONFIG"
+}
+
 setup_main() {
     [[ "$(id -u)" == 0 ]] || { echo '主機設定需要 root／sudo。' >&2; return 1; }
     cd "$(dirname "${BASH_SOURCE[0]}")/.."
     local project="$PWD" version directory binary user temp_dir group cron_id local_file
     [[ -f /etc/debian_version ]] || { echo '自動設定支援 Debian／Ubuntu；其他系統請備妥環境後設 DEPLOY_SETUP_SYSTEM=0。' >&2; return 1; }
     local -a packages=() fpm_dirs=() pool_files=()
+    discover_custom_fpm
     version="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
-    php -r 'exit(extension_loaded("zip")?0:1);' || packages+=("php$version-zip")
-    php -r 'exit(extension_loaded("mbstring")?0:1);' || packages+=("php$version-mbstring")
+    if [[ -n "$CUSTOM_PID" ]]; then
+        php -r 'exit(extension_loaded("zip")&&extension_loaded("mbstring")?0:1);' || {
+            echo '自編 PHP CLI 缺少 zip／mbstring；不使用 apt 替換自編 PHP，請載入既有擴充。' >&2; return 1;
+        }
+    else
+        php -r 'exit(extension_loaded("zip")?0:1);' || packages+=("php$version-zip")
+        php -r 'exit(extension_loaded("mbstring")?0:1);' || packages+=("php$version-mbstring")
+    fi
     local office_package
     for office_package in libreoffice-writer libreoffice-calc libreoffice-impress; do
         dpkg-query -W -f='${Status}' "$office_package" 2>/dev/null | grep -q 'install ok installed' || packages+=("$office_package")
@@ -78,6 +156,7 @@ setup_main() {
     dpkg-query -W -f='${Status}' fonts-noto-cjk 2>/dev/null | grep -q 'install ok installed' || packages+=(fonts-noto-cjk)
     command -v cron >/dev/null || packages+=(cron)
     for directory in /etc/php/*/fpm; do
+        [[ -z "$CUSTOM_PID" ]] || break
         [[ -d "$directory/conf.d" && -f "$directory/php.ini" ]] || continue
         version="$(basename "$(dirname "$directory")")"
         # 只修改正在使用的 FPM 版本，保留其他版本設定。
@@ -92,13 +171,17 @@ setup_main() {
         dpkg-query -W -f='${Status}' "php$version-zip" 2>/dev/null | grep -q 'install ok installed' || packages+=("php$version-zip")
         dpkg-query -W -f='${Status}' "php$version-mbstring" 2>/dev/null | grep -q 'install ok installed' || packages+=("php$version-mbstring")
     done
-    [[ ${#fpm_dirs[@]} -gt 0 ]] || { echo '找不到啟動中的 PHP-FPM 8.2+；未變更系統。請確認此網站的 FPM 版本，PHP CLI 版本不代表網站版本。' >&2; return 1; }
+    [[ ${#fpm_dirs[@]} -gt 0 || -n "$CUSTOM_PID" ]] || { echo '找不到啟動中的 PHP-FPM 8.2+；未變更系統。請確認此網站的 FPM 版本，PHP CLI 版本不代表網站版本。' >&2; return 1; }
     user="${DEPLOY_PHP_USER:-}"
     if [[ -z "$user" ]]; then
+        if [[ -n "$CUSTOM_PID" ]]; then
+            user="$("$CUSTOM_BIN" -tt -y "$CUSTOM_CONFIG" 2>&1 | sed -n 's/.*NOTICE: *user = \([^ ]*\).*/\1/p' | sort -u)"
+        else
         shopt -s nullglob
         for directory in "${fpm_dirs[@]}"; do pool_files+=("$directory"/pool.d/*.conf); done
         [[ ${#pool_files[@]} -gt 0 ]] || { echo '找不到 PHP pool 設定。' >&2; return 1; }
         user="$(awk -F= '/^[[:space:]]*user[[:space:]]*=/ {sub(/;.*/,"",$2);gsub(/[[:space:]]/,"",$2);print $2}' "${pool_files[@]}" | sort -u)"
+        fi
     fi
     [[ "$user" =~ ^[a-z_][a-z0-9_-]*\$?$ && "$user" != root ]] && id "$user" >/dev/null 2>&1 || {
         echo 'PHP pool 有不同執行帳號或無法辨識；請設 DEPLOY_PHP_USER 為此網站的 PHP 帳號。' >&2; return 1;
@@ -126,6 +209,7 @@ setup_main() {
         version="$(basename "$(dirname "$directory")")"
         configure_fpm "$directory" "/usr/bin/php$version"
     done
+    if [[ -n "$CUSTOM_PID" ]]; then configure_custom_fpm; fi
     install -d -m 755 /etc/cron.d
     # cron 使用 POSIX shell；單引號與百分號必須正確處理。
     local quoted_project quoted_temp php_path

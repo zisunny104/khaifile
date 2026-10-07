@@ -86,6 +86,11 @@ PHP-FPM 上傳至少 50 MB、請求至少 52 MB、執行時間至少 300 秒，�
 網站帳號。自動設定產生忽略的 `config.local.php` 與專屬 `/etc/cron.d/khaifile-*`，
 不修改 Nginx 或其他工具程式。使用中的 PHP-FPM 會重載，套用新設定。
 非 Debian／Ubuntu 或容器部署請先備妥環境，再略過系統設定。
+也支援 `/opt` 下正在運行的自編 PHP-FPM：從 master 程序找出執行檔與 FPM
+設定檔，再讀取其實際 PHP ini 路徑與 pool 帳號；不以 apt 替換自編 PHP。
+有多個自編版本時，用 `DEPLOY_FPM_CONFIG` 指定網站使用的設定檔。
+沒有 ini 掃描目錄時只更新 php.ini 的 KhaiFile 區塊，保留原始備份；檢查成功
+後以 USR2 平滑重載該 master，不重載其他 FPM。
 
 放入 KoiLiSu 的 `apps/khaifile` 後，工具入口為 `/koilisu/khaifile`，
 靜態資源位於 `/koilisu/apps/khaifile/`。母專案已加入 KhaiFile 子模組。
