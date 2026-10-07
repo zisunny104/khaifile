@@ -1,6 +1,6 @@
 <?php defined('KHAIFILE_VIEW') || exit; ?>
     <div id="app-footer" class="ts-content is-secondary is-vertically-padded">
-        <div class="ts-container is-fluid">
+        <div class="ts-container">
             <div class="ts-grid">
                 <div class="column is-fluid">
                     <div class="ts-wrap is-vertical is-compact">
