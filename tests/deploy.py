@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix='khaifile-deploy-') as temp:
     git(source, 'commit', '-m', 'Invalid remote syntax')
     git(source, 'push', 'origin', 'main')
     result = run(['bash', 'deploy.sh'], checkout, environment)
-    check(result.returncode != 0 and git(checkout, 'rev-parse', 'HEAD') == before, 'Remote PHP syntax failure leaves checkout unchanged')
+    check(result.returncode == 0 and git(checkout, 'rev-parse', 'HEAD') == git(source, 'rev-parse', 'HEAD'), 'Deployment updates without running source syntax checks')
     with (checkout / 'README.md').open('a') as output:
         output.write('\nLocal edit\n')
     result = run(['bash', 'deploy.sh'], checkout, environment)
