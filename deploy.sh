@@ -7,11 +7,16 @@ if [ -t 1 ]; then
   BOLD=$'\033[1m'; DIM=$'\033[2m'
   RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; CYAN=$'\033[36m'
   RESET=$'\033[0m'
+  SUCCESS_BLOCK=$'\033[42;97;1m'
 else
   BOLD=''; DIM=''; RED=''; GREEN=''; YELLOW=''; CYAN=''; RESET=''
+  SUCCESS_BLOCK=''
 fi
 
-step() { echo "${BOLD}${CYAN}==>${RESET} ${BOLD}$1${RESET}"; }
+step() {
+    printf '\n%s────────────────────────────%s\n' "$DIM" "$RESET"
+    printf '%s%s%s\n' "${BOLD}${CYAN}" "$1" "$RESET"
+}
 ok()   { echo "  ${GREEN}✓${RESET} $1"; }
 warn() { echo "  ${YELLOW}!${RESET} $1"; }
 fail() { echo "  ${RED}✗${RESET} $1"; }
@@ -179,4 +184,6 @@ fi
 step '網站檢查'
 selfcheck
 VERSION="$(php -r '$c=require "config.php"; echo $c["version"]??"?";')"
-echo "${GREEN}${BOLD}✓ 部署完成${RESET}  KhaiFile v${VERSION} · $(git rev-parse --short HEAD)"
+printf '\n%s ✓ 部署完成 %s\n' "$SUCCESS_BLOCK" "$RESET"
+echo "  KhaiFile v${VERSION} · $(git rev-parse --short HEAD)"
+echo "  完成時間：$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z (%z)')"
