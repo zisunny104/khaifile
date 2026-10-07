@@ -185,5 +185,6 @@ step '網站檢查'
 selfcheck
 VERSION="$(php -r '$c=require "config.php"; echo $c["version"]??"?";')"
 printf '\n%s ✓ 部署完成 %s\n' "$SUCCESS_BLOCK" "$RESET"
-echo "  KhaiFile v${VERSION} · $(git rev-parse --short HEAD)"
+echo "  工具版本：${BOLD}v${VERSION}${RESET}"
+echo "  目前 commit：${BOLD}$(git rev-parse --short HEAD)${RESET}"
 echo "  完成時間：$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z (%z)')"
