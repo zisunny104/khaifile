@@ -1,0 +1,33 @@
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
+main { flex: 1; width: 100%; }
+.header-row, .section-heading, .footer-row, .file-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.brand { color: inherit; font-weight: 700; text-decoration: none; }
+.intro { padding-block: 1rem; }
+.intro p { margin-block: .65rem; }
+.version { display: inline-block; margin-left: .4rem; font-size: 1rem; font-weight: normal; color: var(--ts-gray-600); }
+.drop-zone { padding: 2rem 1rem; text-align: center; border: 2px dashed var(--ts-gray-300); border-radius: .5rem; cursor: pointer; }
+.drop-zone.drag-over { border-color: var(--ts-primary-500); background: var(--ts-primary-50); }
+.drop-zone .ts-header { text-align: center; }
+.drop-zone:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--ts-primary-500); outline-offset: 3px; }
+.settings { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+.empty-state { padding: 3rem 1rem; text-align: center; }
+.queue { display: grid; gap: 1rem; }
+.file-heading { align-items: flex-start; }
+.file-name { overflow-wrap: anywhere; font-weight: 600; }
+.name-field { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+.name-field .ts-input { flex: 1; min-width: 12rem; }
+.outputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .75rem; margin-top: 1rem; }
+.output { border: 1px solid var(--ts-gray-300); border-radius: .4rem; padding: .8rem; display: flex; flex-direction: column; gap: .4rem; }
+.output .ts-button { margin-top: auto; }
+.notes { margin-top: .8rem; overflow-wrap: anywhere; }
+.error-text { color: var(--ts-negative-600); }
+.file-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.help-list { padding-left: 1.5rem; line-height: 1.8; }
+.license-dialog { max-width: 44rem; max-height: 85vh; border: 1px solid var(--ts-gray-300); border-radius: .6rem; background: var(--ts-gray-50); color: var(--ts-gray-900); }
+.license-dialog::backdrop { background: rgba(0,0,0,.5); }
+.license-dialog pre { white-space: pre-wrap; max-height: 45vh; overflow: auto; }
+.skip-link { position: absolute; top: -5rem; left: 1rem; z-index: 10; padding: .8rem; background: var(--ts-gray-50); }
+.skip-link:focus { top: .5rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+[hidden] { display: none !important; }
+@media (max-width: 600px) { .drop-zone { padding: 1.5rem .5rem; } .name-field { align-items: stretch; } .name-field .ts-input { min-width: 100%; } .section-heading > .ts-wrap { width: 100%; } }

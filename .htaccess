@@ -1,0 +1,9 @@
+Options -Indexes
+<FilesMatch "^(?:config\.php|.*\.local\.php|.*\.ini)$">
+    Require all denied
+</FilesMatch>
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule (^|/)\. - [F,L]
+    RewriteRule ^(?:api|tools|tests)(?:/|$) - [F,L]
+</IfModule>

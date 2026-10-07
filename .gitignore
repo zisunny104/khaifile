@@ -1,0 +1,15 @@
+*.log
+*.local.php
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.DS_Store
+.vscode/
+.idea/
+node_modules/
+tests/fixtures/
+tests/artifacts/
+vendor/tocas/flags/
+.deploy_check_url
