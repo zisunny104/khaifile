@@ -23,6 +23,11 @@ main { flex: 1; width: 100%; }
 .error-text { color: var(--ts-negative-600); }
 .file-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .help-list { padding-left: 1.5rem; line-height: 1.8; }
+.help-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; list-style: none; }
+.help-toggle::-webkit-details-marker { display: none; }
+.help-toggle .ts-icon { transition: transform .15s; }
+details[open] > .help-toggle .ts-icon { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .help-toggle .ts-icon { transition: none; } }
 .license-dialog { max-width: 44rem; max-height: 85vh; border: 1px solid var(--ts-gray-300); border-radius: .6rem; background: var(--ts-gray-50); color: var(--ts-gray-900); }
 .license-dialog::backdrop { background: rgba(0,0,0,.5); }
 .license-dialog pre { white-space: pre-wrap; max-height: 45vh; overflow: auto; }

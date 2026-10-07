@@ -66,12 +66,12 @@ $e = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     </section>
 
     <details id="help" class="ts-box has-top-spaced-large">
-        <summary class="ts-content">使用說明與格式注意事項</summary>
+        <summary class="ts-content help-toggle"><span>使用說明</span><span class="ts-icon is-angle-down-icon" aria-hidden="true"></span></summary>
         <div class="ts-content">
-            <ol class="help-list"><li>加入 Office、ODF 或 PDF；每個來源是一組檔案。</li><li>修改名稱主體，副檔名由格式決定；預設沿用原名稱。</li><li>開始處理後依序轉換；失敗的檔案可重試，不影響其他組。</li><li>下載單一格式、整組 ZIP，或勾選多組批次下載。</li></ol>
-            <p>PDF 暫不支援轉換為可編輯文件。已是 ODF 的文件會保留原檔並產生 PDF。</p>
-            <p>複雜排版、缺少的字型、公式與試算表列印範圍，可能和原軟體呈現不同，發布前請檢查結果。格式轉換不等於完成文件無障礙。</p>
-            <p>PDF 壓縮會重新寫入文件；含數位簽章的 PDF 會保留原檔。需維持標籤、表單或其他結構時，請取消 PDF 壓縮。</p>
+            <ol class="help-list"><li>加入檔案，每個來源為一組。</li><li>可修改檔名，預設沿用原名稱。</li><li>點選「開始處理」。失敗可重試，其他檔案會繼續處理。</li><li>下載單檔、整組 ZIP，或勾選多組批次下載。</li></ol>
+            <p>ODF 文件會補上 PDF；PDF 可壓縮，不轉為可編輯文件。</p>
+            <p>轉換可能影響排版、字型、公式與列印範圍，發布前請檢查。開放格式不保證符合無障礙規範。</p>
+            <p>壓縮可能影響 PDF 的標籤與表單，需要保留時請取消。含數位簽章的 PDF 不壓縮。</p>
         </div>
     </details>
 </main>
