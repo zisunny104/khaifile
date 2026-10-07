@@ -6,6 +6,22 @@ cd "$(dirname "$0")"
 source tools/deploy-output.sh
 
 abort() { fail "$1"; exit 1; }
+check_local_syntax() {
+    local logfile status=0 kind message
+    logfile="$(mktemp)"
+    php tools/check.php --summary > "$logfile" 2>&1 || status=$?
+    while IFS=$'\t' read -r kind message; do
+        case "$kind" in
+            pass) ok "$message" ;;
+            skip) warn "$message" ;;
+            fail) fail "$message" ;;
+            detail) printf '    %s\n' "$message" ;;
+            *) printf '    %s\n' "$kind${message:+ $message}" ;;
+        esac
+    done < "$logfile"
+    rm -f "$logfile"
+    [[ "$status" -eq 0 ]] || exit "$status"
+}
 run_logged() {
     local label="$1" logfile status
     shift
@@ -107,7 +123,7 @@ if [[ "$check_only" -eq 1 ]]; then
     command -v php >/dev/null || abort '需要 PHP CLI 8.2+。'
     step '檢查部署狀態'
     run_logged 'PHP、轉換工具與暫存目錄正常' php tools/deps.php
-    run_logged '程式語法正常' php tools/check.php
+    check_local_syntax
     selfcheck
     exit 0
 fi
@@ -133,14 +149,16 @@ before="$(git rev-parse --short HEAD)"
 git merge-base --is-ancestor HEAD "$target" || abort '本機與遠端版本已分歧，無法快轉更新。'
 
 syntax_dir="$(mktemp -d)"
+php_count=0
 trap 'rm -rf -- "$syntax_dir"' EXIT
 while IFS= read -r -d '' path; do
     if [[ "$path" == *.php ]]; then
+        php_count=$((php_count + 1))
         git show "$target:$path" > "$syntax_dir/check.php"
         php -l "$syntax_dir/check.php" >/dev/null || abort "遠端 PHP 語法錯誤：$path"
     fi
 done < <(git ls-tree -r -z --name-only "$target")
-ok '遠端 PHP 語法正常'
+ok "遠端 PHP（$(git rev-parse --short "$target")）：$php_count 檔通過（php -l）"
 step '更新程式'
 
 if [[ "$(git rev-parse HEAD)" == "$target" ]]; then
@@ -162,7 +180,7 @@ else
     run_logged 'PHP、轉換工具與暫存目錄正常' php tools/deps.php
 fi
 # 系統設定已用實際 PHP 身分檢查依賴；部署帳號不需取得私人暫存寫入權限。
-run_logged '程式語法正常' php tools/check.php
+check_local_syntax
 if [[ -n "${DEPLOY_RELOAD_CMD:-}" ]]; then
     run_logged '服務已重載' bash -lc "$DEPLOY_RELOAD_CMD"
 fi
