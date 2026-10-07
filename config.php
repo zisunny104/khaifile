@@ -13,6 +13,6 @@ return [
     'ttl' => 3600,
     'timeout' => 120,
     'temp_dir' => getenv('KHAIFILE_TEMP_DIR') ?: ($local['temp_dir'] ?? sys_get_temp_dir() . '/khaifile'),
-    'office_bin' => getenv('KHAIFILE_OFFICE_BIN') ?: 'soffice',
-    'gs_bin' => getenv('KHAIFILE_GS_BIN') ?: 'gs',
+    'office_bin' => getenv('KHAIFILE_OFFICE_BIN') ?: ($local['office_bin'] ?? 'soffice'),
+    'gs_bin' => getenv('KHAIFILE_GS_BIN') ?: ($local['gs_bin'] ?? 'gs'),
 ];

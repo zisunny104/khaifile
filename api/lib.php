@@ -97,10 +97,18 @@ function kf_public(array $manifest): array
     return ['id' => $manifest['id'], 'name' => $manifest['name'], 'outputs' => $outputs, 'notes' => $manifest['notes'], 'expires' => $manifest['created'] + 3600];
 }
 
+function kf_path(): string
+{
+    // 自編 PHP-FPM 可能清除 PATH；仍保留部署者設定的非標準工具路徑。
+    return implode(PATH_SEPARATOR, array_unique(array_filter(array_merge(
+        explode(PATH_SEPARATOR, getenv('PATH') ?: ''), ['/usr/local/bin', '/usr/bin', '/bin']
+    ))));
+}
+
 function kf_binary(string $command): ?string
 {
     if (str_contains($command, '/')) return is_executable($command) ? $command : null;
-    foreach (explode(PATH_SEPARATOR, getenv('PATH') ?: '') as $path) {
+    foreach (explode(PATH_SEPARATOR, kf_path()) as $path) {
         if (is_executable($path . '/' . $command) && is_file($path . '/' . $command)) return $path . '/' . $command;
     }
     return null;
@@ -116,6 +124,7 @@ function kf_run(array $command, string $dir, int $timeout): void
     $fontConfig = $dir . '/fonts.conf';
     file_put_contents($fontConfig, '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd"><fontconfig><include>/etc/fonts/fonts.conf</include><cachedir>' . htmlspecialchars($cache, ENT_XML1) . '</cachedir></fontconfig>');
     $environment = getenv();
+    $environment['PATH'] = kf_path();
     $environment['FONTCONFIG_FILE'] = $fontConfig;
     $limits = kf_binary('prlimit');
     if ($limits) $command = [$limits, '--fsize=104857600', '--cpu=' . ($timeout + 5), '--', ...$command];

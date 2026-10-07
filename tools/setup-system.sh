@@ -249,7 +249,10 @@ setup_main() {
         install -d -o "$user" -g "$group" -m 700 "$temp_dir"
     fi
     local_file="$project/config.local.php"
-    php -r 'echo "<?php // KhaiFile managed\nreturn [\x27temp_dir\x27 => ".var_export($argv[1],true)."];\n";' "$temp_dir" | write_managed "$local_file" 644
+    local office_bin gs_bin
+    office_bin="$(command -v "${KHAIFILE_OFFICE_BIN:-soffice}")"
+    gs_bin="$(command -v "${KHAIFILE_GS_BIN:-gs}")"
+    php -r 'echo "<?php // KhaiFile managed\nreturn ".var_export(["temp_dir"=>$argv[1],"office_bin"=>$argv[2],"gs_bin"=>$argv[3]],true).";\n";' "$temp_dir" "$office_bin" "$gs_bin" | write_managed "$local_file" 644
     for directory in "${fpm_dirs[@]}"; do
         version="$(basename "$(dirname "$directory")")"
         configure_fpm "$directory" "/usr/bin/php$version"
