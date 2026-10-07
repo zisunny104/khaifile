@@ -7,7 +7,7 @@ main { flex: 1; width: 100%; }
 @media (max-width: 600px) { #app-footer .ts-grid { flex-wrap: wrap; } }
 .drop-zone { padding: 2rem 1rem; text-align: center; border: 2px dashed var(--ts-gray-300); border-radius: .5rem; cursor: pointer; }
 .drop-zone.drag-over { border-color: var(--ts-primary-500); background: var(--ts-primary-50); }
-.drop-zone .ts-header { text-align: center; }
+.drop-zone .ts-header { justify-content: center; text-align: center; }
 .drop-zone:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--ts-primary-500); outline-offset: 3px; }
 .settings { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
 .empty-state { padding: 3rem 1rem; text-align: center; }
