@@ -48,6 +48,7 @@ with tempfile.TemporaryDirectory(prefix='khaifile-deploy-') as temp:
     checkout = directory / 'checkout'
     git(directory, 'clone', str(remote), str(checkout))
     environment = os.environ.copy()
+    environment['DEPLOY_SETUP_SYSTEM'] = '0'
     environment.pop('DEPLOY_CHECK_URL', None)
     result = run(['bash', 'deploy.sh', '--check-deps'], checkout, environment)
     check(result.returncode == 0, 'Runtime dependencies pass in current environment')
@@ -63,6 +64,15 @@ with tempfile.TemporaryDirectory(prefix='khaifile-deploy-') as temp:
     git(source, 'push', 'origin', 'main')
     result = run(['bash', 'deploy.sh'], checkout, environment)
     check(result.returncode == 0 and git(checkout, 'rev-parse', 'HEAD') == git(source, 'rev-parse', 'HEAD'), 'Valid update fast-forwards')
+    git(checkout, 'checkout', '--detach')
+    result = run(['bash', 'deploy.sh'], checkout, environment)
+    check(result.returncode == 0, 'Submodule-style detached HEAD deployment is supported')
+    git(checkout, 'checkout', 'main')
+    setup = checkout / 'tools' / 'setup-system.sh'
+    setup.write_text('exit 99\n')
+    result = run(['bash', 'deploy.sh', '--check-only'], checkout, environment)
+    check(result.returncode == 0, 'Check-only never invokes system setup')
+    git(checkout, 'restore', '--worktree', 'tools/setup-system.sh')
     before = git(checkout, 'rev-parse', 'HEAD')
     (source / 'broken.php').write_text('<?php broken {\n')
     git(source, 'add', 'broken.php')

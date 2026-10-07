@@ -1,4 +1,6 @@
 <?php
+$localPath = __DIR__ . '/config.local.php';
+$local = is_file($localPath) ? require $localPath : [];
 return [
     'name' => 'KhaiFile',
     'description' => '補齊開放文件格式與 PDF，保留原檔、調整名稱並批次下載。',
@@ -10,7 +12,7 @@ return [
     'max_jobs' => 100,
     'ttl' => 3600,
     'timeout' => 120,
-    'temp_dir' => getenv('KHAIFILE_TEMP_DIR') ?: sys_get_temp_dir() . '/khaifile',
+    'temp_dir' => getenv('KHAIFILE_TEMP_DIR') ?: ($local['temp_dir'] ?? sys_get_temp_dir() . '/khaifile'),
     'office_bin' => getenv('KHAIFILE_OFFICE_BIN') ?: 'soffice',
     'gs_bin' => getenv('KHAIFILE_GS_BIN') ?: 'gs',
 ];

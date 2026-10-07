@@ -53,6 +53,7 @@ php tools/check.php
 php tests/backend.php
 python3 tests/integration.py
 python3 tests/deploy.py
+python3 tests/setup-system.py
 ```
 
 整合測試需要 Python 的 python-docx、openpyxl、python-pptx、pypdf、Pillow、
@@ -62,7 +63,11 @@ Playwright 與 Chromium；產生文件後啟動自己的 PHP 伺服器，驗證
 ## 部署與維運
 
 `./deploy.sh` 檢查執行期依賴與工作目錄，fetch 後先驗證遠端 PHP 語法，
-再 fast-forward 更新與檢查網站。它不會自動安裝作業系統套件。
+再 fast-forward 更新與檢查網站，操作與訊息沿用其他開利手工具。
+正常部署在 Debian／Ubuntu 透過 root／sudo 補齊缺少的依賴，設定使用中的
+PHP-FPM 上傳至少 50 MB、請求至少 52 MB、執行時間至少 300 秒，保留較大的
+既有設定。會建立網站之外的暫存目錄與每五分鐘清理排程，重複部署不新增排程。
+只更新 KhaiFile，不會同步其他子專案；子模組的 detached HEAD 也可快轉更新。
 
 ```sh
 ./deploy.sh --check-deps
@@ -76,9 +81,16 @@ Playwright 與 Chromium；產生文件後啟動自己的 PHP 伺服器，驗證
 本機 Tocas 資源可用，並確認工具與靜態資源路徑的 `.git`、設定檔、API
 原始碼、內部工具均回 403／404。未設定網址時會明確列為未驗證。
 
+`--check-only`、`--check-deps` 只檢查，不修改系統。`DEPLOY_SETUP_SYSTEM=0`
+略過主機設定；多個 PHP pool 使用不同帳號時，以 `DEPLOY_PHP_USER` 指定此
+網站帳號。自動設定產生忽略的 `config.local.php` 與專屬 `/etc/cron.d/khaifile-*`，
+不修改 Nginx 或其他工具程式。使用中的 PHP-FPM 會重載，套用新設定。
+非 Debian／Ubuntu 或容器部署請先備妥環境，再略過系統設定。
+
 放入 KoiLiSu 的 `apps/khaifile` 後，工具入口為 `/koilisu/khaifile`，
-靜態資源位於 `/koilisu/apps/khaifile/`。這個專案不會自動修改母專案的
-submodule 列表；正式加入請透過母專案的版本審閱流程。
+靜態資源位於 `/koilisu/apps/khaifile/`。母專案已加入 KhaiFile 子模組。
+若其他工具在 VPS 有較新的進度，可只在 `apps/khaifile` 內部署此工具，
+保留其他工具的版本；母專案日後重新同步子模組時，仍以其提交記錄的版本為準。
 
 PHP-FPM 可使用 `.user.ini`；PHP CLI 請使用上方 `-d` 參數。反向代理的
 request body 限制至少須為 52 MB、等待時間至少 300 秒。網站應拒絕
@@ -90,7 +102,8 @@ request body 限制至少須為 52 MB、等待時間至少 300 秒。網站應�
 文件轉換程序放入有 CPU／記憶體／磁碟限制且禁止對外網路的隔離 worker 或
 容器，並由反向代理設定使用量限制；PHP CLI 開發伺服器供本機驗證。
 
-定期執行清理，避免無後續請求時的到期檔案停留：
+部署腳本自動建立定期清理，避免無後續請求時的到期檔案停留。
+略過系統設定時，請使用既有排程機制執行：
 
 ```sh
 php tools/cleanup.php
