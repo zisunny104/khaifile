@@ -61,9 +61,6 @@ Playwright 與 Chromium；產生文件後啟動自己的 PHP 伺服器，驗證
 
 ## 部署與維運
 
-第一次在 VPS 安裝，請參考 [Ubuntu 24.04／Nginx 部署步驟](docs/VPS.md)，
-包含 PHP-FPM、HTTPS、內部路徑保護與暫存清理設定。
-
 `./deploy.sh` 檢查執行期依賴與工作目錄，fetch 後先驗證遠端 PHP 語法，
 再 fast-forward 更新與檢查網站。它不會自動安裝作業系統套件。
 
