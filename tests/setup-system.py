@@ -40,6 +40,9 @@ with tempfile.TemporaryDirectory(prefix='khaifile-system-') as temporary:
 
     result = execute('! supported_php_version 7.4 && ! supported_php_version 8.1 && supported_php_version 8.2 && supported_php_version 8.4')
     check(result.returncode == 0, 'Legacy FPM versions are excluded before host changes')
+    result = execute('printf "NOTICE: \\tuser = www-data\\nNOTICE: [www] user = www-data\\nNOTICE: listen.owner = root\\n" | pool_users')
+    check(result.returncode == 0 and result.stdout.strip() == 'www-data',
+          'Custom FPM pool account accepts tabs and pool prefixes without confusing socket owner')
 
     ini = fpm / 'php.ini'
     ini.write_text('upload_max_filesize=2M\npost_max_size=8M\nmax_execution_time=30\n')

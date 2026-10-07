@@ -7,6 +7,11 @@ supported_php_version() {
         (( BASH_REMATCH[1] > 8 || (BASH_REMATCH[1] == 8 && BASH_REMATCH[2] >= 2) ))
 }
 
+pool_users() {
+    # FPM -tt 的 NOTICE 前綴與縮排可包含 tab，不限定單一輸出排版。
+    sed -n 's/.*[[:space:]]user[[:space:]]*=[[:space:]]*\([^[:space:]]*\).*/\1/p' | sort -u
+}
+
 write_managed() {
     local destination="$1" mode="$2" temporary
     [[ ! -L "$destination" ]] || { echo "拒絕寫入符號連結：$destination" >&2; return 1; }
@@ -175,7 +180,10 @@ setup_main() {
     user="${DEPLOY_PHP_USER:-}"
     if [[ -z "$user" ]]; then
         if [[ -n "$CUSTOM_PID" ]]; then
-            user="$("$CUSTOM_BIN" -tt -y "$CUSTOM_CONFIG" 2>&1 | sed -n 's/.*NOTICE: *user = \([^ ]*\).*/\1/p' | sort -u)"
+            user="$("$CUSTOM_BIN" -tt -y "$CUSTOM_CONFIG" 2>&1 | pool_users)"
+            if [[ -z "$user" ]]; then
+                user="$(ps --ppid "$CUSTOM_PID" -o user=,args= | awk '/php-fpm: pool/ {print $1}' | sort -u)"
+            fi
         else
         shopt -s nullglob
         for directory in "${fpm_dirs[@]}"; do pool_files+=("$directory"/pool.d/*.conf); done
