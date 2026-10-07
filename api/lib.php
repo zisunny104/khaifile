@@ -30,6 +30,13 @@ function kf_remove(string $path): void
     rmdir($path);
 }
 
+function kf_throttle(string $ownerDir, string $action, float $minInterval): void
+{
+    $marker = $ownerDir . '/.throttle-' . $action;
+    if (is_file($marker) && microtime(true) - filemtime($marker) < $minInterval) throw new KfError('請求太頻繁，請稍候再試。', 429);
+    touch($marker);
+}
+
 function kf_storage(array $config, string $owner): array
 {
     $base = $config['temp_dir'];
