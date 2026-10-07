@@ -2,24 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# 有顏色的終端機才上色，避免 log 檔案裡混進一堆 ANSI 逃脫碼
-if [ -t 1 ]; then
-  BOLD=$'\033[1m'; DIM=$'\033[2m'
-  RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; CYAN=$'\033[36m'
-  RESET=$'\033[0m'
-  SUCCESS_BLOCK=$'\033[42;97;1m'
-else
-  BOLD=''; DIM=''; RED=''; GREEN=''; YELLOW=''; CYAN=''; RESET=''
-  SUCCESS_BLOCK=''
-fi
-
-step() {
-    printf '\n%s────────────────────────────%s\n' "$DIM" "$RESET"
-    printf '%s%s%s\n' "${BOLD}${CYAN}" "$1" "$RESET"
-}
-ok()   { echo "  ${GREEN}✓${RESET} $1"; }
-warn() { echo "  ${YELLOW}!${RESET} $1"; }
-fail() { echo "  ${RED}✗${RESET} $1"; }
+# 與其他開利手專案共用部署輸出慣例。
+source tools/deploy-output.sh
 
 abort() { fail "$1"; exit 1; }
 run_logged() {
@@ -128,7 +112,7 @@ if [[ "$check_only" -eq 1 ]]; then
     exit 0
 fi
 
-step '檢查部署環境'
+step '檢查本機變更'
 command -v git >/dev/null || abort '需要 Git。'
 git rev-parse --verify HEAD >/dev/null 2>&1 || abort '尚無提交，請先建立初始 commit。'
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || abort '有尚未提交的修改，部署已中止。'
@@ -137,16 +121,16 @@ git check-ref-format "refs/heads/$branch" || abort 'DEPLOY_BRANCH 無效。'
 # 子模組由母專案初始化時通常是 detached HEAD；只允許向指定遠端分支快轉。
 current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
 [[ -z "$current_branch" || "$current_branch" == "$branch" ]] || abort "請先切換到 $branch 分支。"
-ok '沒有未 commit 的修改'
+ok '沒有未提交的修改'
 command -v php >/dev/null || abort '需要 PHP CLI 8.2+。'
 php -r 'exit(PHP_VERSION_ID>=80200?0:1);' || abort '需要 PHP CLI 8.2+。'
-ok "PHP $(php -r 'echo PHP_VERSION;')"
+ok "PHP CLI：$(php -r 'echo PHP_VERSION;')"
 
-step '更新程式'
+step '取得遠端版本'
 run_logged '已取得遠端版本' git fetch origin "refs/heads/$branch"
 target="$(git rev-parse --verify 'FETCH_HEAD^{commit}')"
 before="$(git rev-parse --short HEAD)"
-git merge-base --is-ancestor HEAD "$target" || abort '本機與遠端已分歧，不能 fast-forward。'
+git merge-base --is-ancestor HEAD "$target" || abort '本機與遠端版本已分歧，無法快轉更新。'
 
 syntax_dir="$(mktemp -d)"
 trap 'rm -rf -- "$syntax_dir"' EXIT
@@ -157,6 +141,7 @@ while IFS= read -r -d '' path; do
     fi
 done < <(git ls-tree -r -z --name-only "$target")
 ok '遠端 PHP 語法正常'
+step '更新程式'
 
 if [[ "$(git rev-parse HEAD)" == "$target" ]]; then
     ok "已是最新版本（$before）"
@@ -184,7 +169,4 @@ fi
 step '網站檢查'
 selfcheck
 VERSION="$(php -r '$c=require "config.php"; echo $c["version"]??"?";')"
-printf '\n%s ✓ 部署完成 %s\n' "$SUCCESS_BLOCK" "$RESET"
-echo "  工具版本：${BOLD}v${VERSION}${RESET}"
-echo "  目前 commit：${BOLD}$(git rev-parse --short HEAD)${RESET}"
-echo "  完成時間：$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z (%z)')"
+deployment_summary "$VERSION" 0
