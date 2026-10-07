@@ -114,5 +114,20 @@ configure_custom_fpm'''
     result = execute('export TEST_FPM_EXIT=1\n' + body, custom_fpm, base / 'php-fpm83.conf')
     check(result.returncode != 0 and custom_ini.read_bytes() == before,
           'Failed custom FPM validation restores settings from this run')
+    site = base / 'nginx-site'
+    original = 'server {\n    location /koilisu/ {\n        try_files $uri /koilisu/index.php$is_args$args;\n    }\n    location ~ \\.php$ { }\n}\n'
+    site.write_text(original)
+    body = 'nginx() { return "${TEST_NGINX_EXIT:-0}"; }\nsystemctl() { :; }\nconfigure_nginx_site "$1"'
+    result = execute(body, site)
+    check(result.returncode == 0 and 'return 404;' in site.read_text()
+          and site.read_text().index('# BEGIN KhaiFile') < site.read_text().index('location /koilisu/')
+          and 'try_files $uri /koilisu/index.php$is_args$args;' in site.read_text(),
+          'Nginx protection is scoped to KhaiFile and preserves the existing route')
+    before = site.stat().st_mtime_ns
+    result = execute(body, site)
+    check(result.returncode == 0 and site.stat().st_mtime_ns == before, 'Nginx protection does not duplicate on repeated deployment')
+    site.write_text(original)
+    result = execute('export TEST_NGINX_EXIT=1\n' + body, site)
+    check(result.returncode != 0 and site.read_text() == original, 'Invalid Nginx configuration is restored without reload')
 
 print(f'PASS {passed} system configuration checks (no real system changes)')

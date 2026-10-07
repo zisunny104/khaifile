@@ -134,6 +134,43 @@ configure_custom_fpm() {
     echo "  ✓ 已設定並平滑重載自編 PHP-FPM：$CUSTOM_CONFIG"
 }
 
+configure_nginx_site() {
+    local site="$1" temporary previous block count
+    site="$(realpath "$site")"
+    [[ -f "$site" ]] || { echo '找不到指定的 Nginx 網站設定。' >&2; return 1; }
+    count="$(grep -cE '^[[:space:]]*location /koilisu/[[:space:]]*\{' "$site" || true)"
+    [[ "$count" == 1 ]] || { echo '網站設定須有唯一的 location /koilisu/，未變更 Nginx。' >&2; return 1; }
+    temporary="$(mktemp "$(dirname "$site")/.khaifile.XXXXXX")"
+    previous="$(mktemp)"
+    block="$(mktemp)"
+    cp -p "$site" "$previous"
+    [[ -e "$site.khaifile-backup" ]] || cp -p "$site" "$site.khaifile-backup"
+    cat > "$block" <<'NGINX'
+    # BEGIN KhaiFile managed
+    location ~ ^/koilisu/(apps/)?khaifile/((api|tools|tests|partials)(/|$)|(config(\.local)?|view)\.php$) {
+        return 404;
+    }
+    # END KhaiFile managed
+NGINX
+    awk 'NR==FNR {block=block $0 "\n";next}
+        /# BEGIN KhaiFile managed/ {skip=1;next}
+        /# END KhaiFile managed/ {skip=0;next}
+        !skip {if ($0 ~ /^[[:space:]]*location \/koilisu\/[[:space:]]*\{/) printf "%s",block;print}' "$block" "$site" > "$temporary"
+    rm -f "$block"
+    chmod --reference="$site" "$temporary"
+    chown --reference="$site" "$temporary"
+    if cmp -s "$temporary" "$site"; then rm -f "$temporary"; else mv "$temporary" "$site"; fi
+    if ! nginx -t; then
+        cp -p "$previous" "$site"
+        rm -f "$previous"
+        echo 'Nginx 設定檢查失敗，已還原，未重載。' >&2
+        return 1
+    fi
+    rm -f "$previous"
+    systemctl reload nginx
+    echo '  ✓ 已阻擋 KhaiFile 私有路徑，保留其他網站規則'
+}
+
 setup_main() {
     [[ "$(id -u)" == 0 ]] || { echo '主機設定需要 root／sudo。' >&2; return 1; }
     cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -218,6 +255,7 @@ setup_main() {
         configure_fpm "$directory" "/usr/bin/php$version"
     done
     if [[ -n "$CUSTOM_PID" ]]; then configure_custom_fpm; fi
+    if [[ -n "${DEPLOY_NGINX_SITE:-}" ]]; then configure_nginx_site "$DEPLOY_NGINX_SITE"; fi
     install -d -m 755 /etc/cron.d
     # cron 使用 POSIX shell；單引號與百分號必須正確處理。
     local quoted_project quoted_temp php_path

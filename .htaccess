@@ -5,5 +5,5 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteRule (^|/)\. - [F,L]
-    RewriteRule ^(?:api|tools|tests)(?:/|$) - [F,L]
+    RewriteRule ^(?:api|tools|tests|partials)(?:/|$) - [F,L]
 </IfModule>

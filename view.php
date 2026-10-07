@@ -1,16 +1,16 @@
 <?php
-$assetBase = $_APP['name'] ?? null;
+defined('KHAIFILE_VIEW') || define('KHAIFILE_VIEW', true);
 // Framework routes do not serve app assets. Standalone deployments use their own directory.
 $assetBase = isset($_APP['dir']) ? '/koilisu/apps/khaifile' : rtrim(dirname(parse_url($_SERVER['SCRIPT_NAME'], PHP_URL_PATH)), '/');
 $assetBase = $assetBase === '/' ? '' : $assetBase;
 $e = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" class="is-rounded">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>KhaiFile — 開放格式文件工具</title>
+    <title>KhaiFile - KoiLiSu | prjToka</title>
     <link rel="stylesheet" href="<?= $e($assetBase) ?>/vendor/tocas/tocas.min.css">
     <link rel="stylesheet" href="<?= $e($assetBase) ?>/assets/app.css">
     <script src="<?= $e($assetBase) ?>/vendor/tocas/tocas.min.js" defer></script>
@@ -18,19 +18,8 @@ $e = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 </head>
 <body class="is-rounded">
 <a href="#main" class="skip-link">跳到主要內容</a>
-<header class="ts-content is-secondary">
-    <div class="ts-container header-row">
-        <a class="brand" href="/koilisu/">KoiLiSu 開利手</a>
-        <span class="ts-text is-description">開放格式文件工具</span>
-    </div>
-</header>
-<main id="main" class="ts-container has-vertically-padded-large">
-    <div class="intro">
-        <div class="ts-text is-description">DOCUMENTS, READY TO SHARE</div>
-        <h1 class="ts-header is-huge is-heavy">KhaiFile <span class="version">v<?= $e($config['version']) ?></span></h1>
-        <p class="ts-text is-large">丟進文件，備齊格式。</p>
-        <p class="ts-text is-description">保留原始檔，補上開放格式與 PDF。整理名稱，再一次下載。</p>
-    </div>
+<main id="main" class="main-content ts-container has-vertically-padded">
+    <?php require __DIR__ . '/partials/header.php'; ?>
 
     <section class="ts-box has-top-spaced-large" aria-labelledby="upload-title">
         <div class="ts-content">
@@ -76,7 +65,7 @@ $e = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
         </div>
     </section>
 
-    <details class="ts-box has-top-spaced-large">
+    <details id="help" class="ts-box has-top-spaced-large">
         <summary class="ts-content">使用說明與格式注意事項</summary>
         <div class="ts-content">
             <ol class="help-list"><li>加入 Office、ODF 或 PDF；每個來源是一組檔案。</li><li>修改名稱主體，副檔名由格式決定；預設沿用原名稱。</li><li>開始處理後依序轉換；失敗的檔案可重試，不影響其他組。</li><li>下載單一格式、整組 ZIP，或勾選多組批次下載。</li></ol>
@@ -86,16 +75,7 @@ $e = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
         </div>
     </details>
 </main>
-<footer class="ts-content is-secondary has-top-spaced-large">
-    <div class="ts-container footer-row">
-        <div class="ts-wrap is-middle-aligned"><a class="brand" href="/koilisu/">KoiLiSu 開利手</a><span class="ts-text is-description">讓工具使用更順手</span><button id="license-button" class="ts-button is-small is-outlined">License</button></div>
-        <div class="ts-selection is-compact" role="radiogroup" aria-label="佈景主題">
-            <label class="item"><input type="radio" name="theme" value="light"><span class="text">淺色</span></label>
-            <label class="item"><input type="radio" name="theme" value="system" checked><span class="text">系統</span></label>
-            <label class="item"><input type="radio" name="theme" value="dark"><span class="text">深色</span></label>
-        </div>
-    </div>
-</footer>
+<?php require __DIR__ . '/partials/footer.php'; ?>
 <dialog id="license-dialog" class="license-dialog"><div class="ts-content"><h2 class="ts-header is-large">授權</h2><p>KhaiFile 採 MIT License。Tocas UI 採 MIT License；伺服器部署的 LibreOffice、Ghostscript 與字型依各自授權使用。</p><pre id="license-text"></pre><form method="dialog"><button class="ts-button">關閉</button></form></div></dialog>
 <script id="app-data" type="application/json"><?= json_encode(['csrf'=>$csrf,'assetBase'=>$assetBase,'maxFileBytes'=>$config['max_file_bytes'],'maxSessionBytes'=>$config['max_session_bytes'],'maxJobs'=>$config['max_jobs']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </body>

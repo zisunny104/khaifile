@@ -1,7 +1,7 @@
 <?php
 // Local development only. Keep upload and conversion data outside this document root.
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
-if (str_contains($path, '..') || preg_match('~(?:^|/)(?:\.[^/]*|api|tools|tests)(?:/|$)~', $path)) {
+if (str_contains($path, '..') || preg_match('~(?:^|/)(?:\.[^/]*|api|tools|tests|partials)(?:/|$)~', $path)) {
     http_response_code(403); exit;
 }
 $root = dirname(__DIR__);
