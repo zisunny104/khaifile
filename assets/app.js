@@ -22,7 +22,7 @@ function button(text, handler, className = 'ts-button is-small is-outlined') {
     return element;
 }
 
-async function api(action, data = {}) {
+async function api(action, data = {}, attempt = 0) {
     const form = new FormData();
     form.append('csrf', settings.csrf);
     for (const [key, value] of Object.entries(data)) {
@@ -33,9 +33,18 @@ async function api(action, data = {}) {
     url.search = '';
     url.searchParams.set('api', action);
     const response = await fetch(url, { method: 'POST', body: form, credentials: 'same-origin' });
+    if (response.status === 429 && ['process', 'archive'].includes(action) && attempt < 3) {
+        await sleep(2000);
+        return api(action, data, attempt + 1);
+    }
     let result;
     try { result = await response.json(); }
     catch { throw new Error('伺服器沒有回傳處理結果，請確認上傳限制或稍後重試。'); }
+    if ([429, 503].includes(response.status) && ['process', 'archive'].includes(action) && attempt < 3) {
+        const delay = Math.min(10, Math.max(2, Number(response.headers.get('Retry-After')) || 2));
+        await sleep(delay * 1000);
+        return api(action, data, attempt + 1);
+    }
     if (!response.ok) throw new Error(result.error || '操作失敗，請重試。');
     return result;
 }

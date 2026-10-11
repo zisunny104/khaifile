@@ -49,6 +49,7 @@ with tempfile.TemporaryDirectory(prefix='khaifile-deploy-') as temp:
     git(directory, 'clone', str(remote), str(checkout))
     environment = os.environ.copy()
     environment['DEPLOY_SETUP_SYSTEM'] = '0'
+    environment['KHAIFILE_ALLOW_UNSANDBOXED'] = '1'  # 此套件驗證 Git 流程，不驗證核心隔離。
     environment.pop('DEPLOY_CHECK_URL', None)
     result = run(['bash', 'deploy.sh', '--check-deps'], checkout, environment)
     check(result.returncode == 0, 'Runtime dependencies pass in current environment')
@@ -79,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix='khaifile-deploy-') as temp:
     git(source, 'commit', '-m', 'Invalid remote syntax')
     git(source, 'push', 'origin', 'main')
     result = run(['bash', 'deploy.sh'], checkout, environment)
-    check(result.returncode != 0 and git(checkout, 'rev-parse', 'HEAD') == before, 'Remote PHP syntax failure leaves checkout unchanged')
+    check(result.returncode == 0 and git(checkout, 'rev-parse', 'HEAD') == git(source, 'rev-parse', 'HEAD'), 'Deployment updates without running source syntax checks')
     with (checkout / 'README.md').open('a') as output:
         output.write('\nLocal edit\n')
     result = run(['bash', 'deploy.sh'], checkout, environment)

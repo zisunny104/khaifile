@@ -8,13 +8,18 @@ else
     BOLD=''; DIM=''; RED=''; GREEN=''; YELLOW=''; CYAN=''; RESET=''
 fi
 
-separator() { printf '\n%s────────────────────────────%s\n' "$DIM" "$RESET"; }
+DEPLOY_OUTPUT_STARTED=0
+separator() {
+    if [ "$DEPLOY_OUTPUT_STARTED" -eq 0 ]; then
+        printf '%s────────────────────────────%s\n' "$DIM" "$RESET"
+        DEPLOY_OUTPUT_STARTED=1
+    fi
+}
 step() { separator; printf '%s%s%s\n' "${BOLD}${CYAN}" "$1" "$RESET"; }
 status_line() {
-    local color="$1" fallback="$2" text="$3" marker
+    local color="$1" fallback="$2" text="$3" indent="${4-  }" marker
     marker="$fallback"
-    [ -z "$color" ] || marker='■'
-    printf '  %s%s%s %s\n' "$color" "$marker" "$RESET" "$text"
+    printf '%s%s%s%s %s\n' "$indent" "$color" "$marker" "$RESET" "$text"
 }
 ok() { status_line "$GREEN" '✓' "$1"; }
 warn() { status_line "$YELLOW" '!' "$1"; }
@@ -28,13 +33,12 @@ require_cmd() {
 }
 deployment_summary() {
     local version="${1:-}" critical="${2:-0}"
-    separator
     if [ "$critical" -eq 0 ]; then
-        ok "${BOLD}部署完成${RESET}"
+        step "部署完成"
     else
-        fail "${BOLD}部署未完成${RESET}"
+        step "部署未完成"
     fi
     [ -z "$version" ] || printf '  專案版本：%sv%s%s\n' "$BOLD" "$version" "$RESET"
     printf '  目前提交：%s%s%s\n' "$BOLD" "$(git rev-parse --short HEAD)" "$RESET"
-    printf '  完成時間：%s\n' "$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z (%z)')"
+    printf '  部署時間：%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
 }

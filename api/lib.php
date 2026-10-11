@@ -17,6 +17,7 @@ function kf_session(): void
 function kf_json(array $data, int $status = 200): never
 {
     http_response_code($status);
+    if (in_array($status, [429,503], true)) header('Retry-After: 2');
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     exit;
@@ -30,11 +31,30 @@ function kf_remove(string $path): void
     rmdir($path);
 }
 
-function kf_throttle(string $ownerDir, string $action, float $minInterval): void
+function kf_disk_bytes(string $dir): int
 {
-    $marker = $ownerDir . '/.throttle-' . $action;
-    if (is_file($marker) && microtime(true) - filemtime($marker) < $minInterval) throw new KfError('請求太頻繁，請稍候再試。', 429);
-    touch($marker);
+    $bytes = 0;
+    if (!is_dir($dir)) return 0;
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS)) as $entry) {
+        if ($entry->isLink()) continue;
+        if ($entry->isFile()) $bytes += $entry->getSize();
+    }
+    return $bytes;
+}
+
+// 所有會增加磁碟用量的操作共用此鎖，避免跨工作階段同時通過配額檢查。
+function kf_capacity_lock(string $base, string $ownerDir, array $config, int $reserve = 0)
+{
+    $lock = fopen($base . '/capacity.lock', 'c');
+    if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) throw new KfError('轉換工具正在處理其他文件，請稍後重試。', 503);
+    try {
+        if (disk_free_space($base) < $reserve + 512 * 1024 * 1024) throw new KfError('伺服器可用磁碟空間不足，請稍後重試。', 507);
+        if (kf_disk_bytes($ownerDir) + $reserve > $config['max_owner_disk_bytes'] ||
+            kf_disk_bytes($base) + $reserve > $config['max_total_disk_bytes']) {
+            throw new KfError('暫存空間已達上限，請清除檔案或稍後重試。', 413);
+        }
+        return $lock;
+    } catch (Throwable $e) { fclose($lock); throw $e; }
 }
 
 function kf_storage(array $config, string $owner): array
@@ -55,7 +75,7 @@ function kf_storage(array $config, string $owner): array
     $dir = $base . '/' . $owner;
     if (!is_dir($dir)) mkdir($dir, 0700);
     $lock = fopen($dir . '/.lock', 'c');
-    if (!$lock || !flock($lock, LOCK_EX)) throw new KfError('暫存空間忙碌，請稍後重試。', 503);
+    if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) throw new KfError('暫存空間忙碌，請稍後重試。', 503);
     touch($dir);
     foreach (glob($dir . '/*') as $entry) {
         if (filemtime($entry) < time() - $config['ttl']) kf_remove($entry);
@@ -84,7 +104,7 @@ function kf_manifest(string $ownerDir, mixed $id, array $config): array
 {
     $id = kf_id($id);
     $path = $ownerDir . '/' . $id . '/manifest.json';
-    if (!is_file($path)) throw new KfError('檔案已到期或不存在，請重新上傳。', 410);
+    if (is_link($path) || !is_file($path)) throw new KfError('檔案已到期或不存在，請重新上傳。', 410);
     $data = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     if ($data['created'] + $config['ttl'] < time()) throw new KfError('檔案已到期，請重新上傳。', 410);
     return $data;
@@ -121,24 +141,57 @@ function kf_binary(string $command): ?string
     return null;
 }
 
-function kf_run(array $command, string $dir, int $timeout): void
+function kf_run(array $command, string $dir, int $timeout, array $config = []): void
 {
+    $config += require dirname(__DIR__) . '/config.php';
+    $remaining = (int)floor(($config['deadline'] ?? microtime(true) + $config['total_timeout']) - microtime(true));
+    if ($remaining < 1) throw new KfError('處理時間過長，請改用較小或較簡單的文件。', 422);
+    $timeout = min($timeout, $remaining);
     $runner = kf_binary('timeout');
-    if (!$runner) throw new KfError('伺服器缺少 timeout 執行工具。', 503);
+    $limits = kf_binary('prlimit');
+    $sandbox = kf_binary('bwrap');
+    if (!$runner || !$limits || (!$sandbox && !$config['allow_unsandboxed'])) throw new KfError('伺服器尚未備妥隔離轉換環境，請聯絡管理者。', 503);
     $log = $dir . '/process.log';
     $cache = $dir . '/fontcache';
     if (!is_dir($cache)) mkdir($cache, 0700);
     $fontConfig = $dir . '/fonts.conf';
-    file_put_contents($fontConfig, '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd"><fontconfig><include>/etc/fonts/fonts.conf</include><cachedir>' . htmlspecialchars($cache, ENT_XML1) . '</cachedir></fontconfig>');
-    $environment = getenv();
-    $environment['PATH'] = kf_path();
-    $environment['FONTCONFIG_FILE'] = $fontConfig;
-    $limits = kf_binary('prlimit');
-    if ($limits) $command = [$limits, '--fsize=104857600', '--cpu=' . ($timeout + 5), '--', ...$command];
-    $process = proc_open([$runner, '--kill-after=5', (string)$timeout, ...$command], [0 => ['file', '/dev/null', 'r'], 1 => ['file', $log, 'w'], 2 => ['file', $log, 'a']], $pipes, $dir, $environment);
+    file_put_contents($fontConfig, '<?xml version="1.0"?><fontconfig><include>/etc/fonts/fonts.conf</include><cachedir>' . htmlspecialchars($cache, ENT_XML1) . '</cachedir></fontconfig>');
+    // 不傳遞 PHP 或網站的密鑰、代理與其他環境變數。
+    if (!is_dir($dir.'/tmp')) mkdir($dir.'/tmp', 0700);
+    $environment = ['PATH'=>kf_path(), 'HOME'=>$dir, 'TMPDIR'=>$dir.'/tmp', 'LANG'=>'C.UTF-8', 'FONTCONFIG_FILE'=>$fontConfig, 'MAX_CONCURRENCY'=>'2', 'OMP_NUM_THREADS'=>'2', 'MALLOC_ARENA_MAX'=>'2'];
+    if (!$config['allow_unsandboxed']) {
+        $isolation = [$sandbox, '--unshare-all', '--die-with-parent', '--new-session', '--cap-drop', 'ALL'];
+        $readDirs = ['/usr', '/lib', '/lib64', '/bin', '/sbin', '/etc/fonts', '/etc/libreoffice', '/etc/ld.so.cache', '/etc/localtime'];
+        $binary = realpath($command[0]);
+        if ($binary && !str_starts_with($binary, '/usr/') && !str_starts_with($binary, '/bin/')) {
+            $prefix = dirname($binary);
+            if (in_array(basename($prefix), ['bin','program'], true)) $prefix = dirname($prefix);
+            $readDirs[] = $prefix;
+        }
+        foreach (array_unique($readDirs) as $path) if (file_exists($path)) array_push($isolation, '--ro-bind', $path, $path);
+        $command = [...$isolation, '--proc', '/proc', '--dev', '/dev', '--bind', $dir.'/tmp', '/tmp', '--bind', $dir, $dir, '--remount-ro', '/', '--remount-ro', '/dev', '--chdir', $dir, '--', ...$command];
+    }
+    $command = [$limits, '--as='.$config['worker_memory_bytes'], '--nproc=256', '--fsize=104857600', '--cpu='.($timeout + 5), '--', ...$command];
+    $process = proc_open([$runner, '--kill-after=2', (string)$timeout, ...$command], [0=>['file','/dev/null','r'], 1=>['file',$log,'w'], 2=>['file',$log,'a']], $pipes, $dir, $environment);
     if (!is_resource($process)) throw new KfError('無法啟動轉換工具。', 503);
-    $status = proc_close($process);
-    if ($status !== 0) throw new KfError(in_array($status, [124, 137], true) ? '處理時間過長，請改用較小或較簡單的文件。' : '無法處理這份文件，請確認檔案未損壞、未加密，且可正常開啟。', 422);
+    $quotaExceeded = false;
+    do {
+        $status = proc_get_status($process);
+        if (!$status['running']) break;
+        clearstatcache();
+        if (kf_disk_bytes($dir) > $config['max_job_disk_bytes']) {
+            $quotaExceeded = true;
+            // timeout 收到 TERM 會終止整個程序群組，包括隔離內的子程序。
+            proc_terminate($process);
+            break;
+        }
+        usleep(100000);
+    } while (true);
+    $exit = proc_close($process);
+    if ($quotaExceeded) throw new KfError('轉換結果過大，請改用較小的文件。', 413);
+    if ($exit === -1) $exit = $status['exitcode'];
+    if ($exit !== 0 && !$config['allow_unsandboxed'] && str_contains(file_get_contents($log), 'bwrap:')) throw new KfError('伺服器隔離環境無法啟動，請聯絡管理者。', 503);
+    if ($exit !== 0) throw new KfError(in_array($exit,[124,137],true) ? '處理時間過長，請改用較小或較簡單的文件。' : '無法處理這份文件，請確認檔案未損壞、未加密，且隔離環境可正常執行。', 422);
 }
 
 function kf_validate(string $file, string $ext): void
@@ -166,7 +219,7 @@ function kf_validate(string $file, string $ext): void
         if ($zip->locateName($required[$ext]) === false) throw new KfError('文件內容與副檔名不符。', 422);
         if (in_array($ext, ['odt','ods','odp'], true)) {
             $mimes = ['odt'=>'text', 'ods'=>'spreadsheet', 'odp'=>'presentation'];
-            if ($zip->getFromName('mimetype') !== 'application/vnd.oasis.opendocument.' . $mimes[$ext]) throw new KfError('開放文件格式與副檔名不符。', 422);
+            if ($zip->getFromName('mimetype', 256) !== 'application/vnd.oasis.opendocument.' . $mimes[$ext]) throw new KfError('開放文件格式與副檔名不符。', 422);
         }
     } finally { $zip->close(); }
 }
@@ -192,7 +245,7 @@ function kf_compress(string $pdf, string $dir, array $config): array
     fclose($stream);
     $dest = $dir . '/compressed.pdf';
     try {
-        kf_run([$gs, '-dSAFER', '-dBATCH', '-dNOPAUSE', '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.7', '-dPDFSETTINGS=/ebook', '-dDetectDuplicateImages=true', '-dColorImageResolution=150', '-dGrayImageResolution=150', '-sOutputFile=' . $dest, $pdf], $dir, $config['timeout']);
+        kf_run([$gs, '-dSAFER', '-dBATCH', '-dNOPAUSE', '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.7', '-dPDFSETTINGS=/ebook', '-dDetectDuplicateImages=true', '-dColorImageResolution=150', '-dGrayImageResolution=150', '-sOutputFile=' . $dest, $pdf], $dir, $config['timeout'], $config);
         if (is_file($dest) && filesize($dest) > 0 && filesize($dest) < filesize($pdf)) return [$dest, 'PDF 已壓縮：' . filesize($pdf) . ' → ' . filesize($dest) . ' 位元組。'];
         if (is_file($dest)) unlink($dest);
         return [$pdf, '壓縮後沒有更小，已保留原 PDF。'];
@@ -204,6 +257,7 @@ function kf_compress(string $pdf, string $dir, array $config): array
 
 function kf_process(string $ownerDir, string $base, array $config): array
 {
+    $config['deadline'] = microtime(true) + $config['total_timeout'];
     $file = $_FILES['file'] ?? null;
     if (!$file || !is_array($file) || !is_int($file['error'] ?? null)) throw new KfError('請選擇一個檔案。');
     if ($file['error'] !== UPLOAD_ERR_OK) throw new KfError('上傳未完成，或檔案超過伺服器大小限制。', 413);
@@ -220,6 +274,7 @@ function kf_process(string $ownerDir, string $base, array $config): array
     $name = kf_name($_POST['name'] ?? pathinfo($file['name'], PATHINFO_FILENAME));
     $id = bin2hex(random_bytes(16));
     $dir = $ownerDir . '/' . $id;
+    $capacityLock = kf_capacity_lock($base, $ownerDir, $config, $config['max_job_disk_bytes']);
     mkdir($dir, 0700);
     $source = $dir . '/source.' . $ext;
     $workerLock = null;
@@ -240,7 +295,7 @@ function kf_process(string $ownerDir, string $base, array $config): array
                 $args = [$office, '-env:UserInstallation=file://' . $dir . '/profile', '--headless', '--nologo', '--nodefault', '--nofirststartwizard', '--norestore'];
                 if ($ext !== $types[$ext]) {
                     mkdir($dir . '/odf', 0700);
-                    kf_run([...$args,'--convert-to',$types[$ext],'--outdir',$dir.'/odf',$source], $dir, $config['timeout']);
+                    kf_run([...$args,'--convert-to',$types[$ext],'--outdir',$dir.'/odf',$source], $dir, $config['timeout'], $config);
                     $odf = 'odf/source.' . $types[$ext];
                     if (!is_file($dir.'/'.$odf) || !filesize($dir.'/'.$odf)) throw new KfError('開放格式轉換未產生檔案，請確認原檔可以正常開啟。', 422);
                     kf_validate($dir.'/'.$odf, $types[$ext]);
@@ -250,7 +305,7 @@ function kf_process(string $ownerDir, string $base, array $config): array
                 }
                 mkdir($dir . '/pdf', 0700);
                 $filter = ['odt'=>'writer_pdf_Export','ods'=>'calc_pdf_Export','odp'=>'impress_pdf_Export'][$types[$ext]];
-                kf_run([...$args,'--convert-to','pdf:'.$filter,'--outdir',$dir.'/pdf',$source], $dir, $config['timeout']);
+                kf_run([...$args,'--convert-to','pdf:'.$filter,'--outdir',$dir.'/pdf',$source], $dir, $config['timeout'], $config);
                 $pdf = $dir . '/pdf/source.pdf';
                 if (!is_file($pdf) || !filesize($pdf)) throw new KfError('PDF 轉換未產生檔案，請確認原檔未加密或損壞。', 422);
             }
@@ -263,10 +318,14 @@ function kf_process(string $ownerDir, string $base, array $config): array
         if ($ext !== 'pdf' || $chosen !== $source) {
             $manifest['outputs']['pdf'] = ['path'=>substr($chosen, strlen($dir)+1),'ext'=>'pdf','label'=>$chosen !== $pdf ? 'PDF（已壓縮）' : 'PDF','size'=>filesize($chosen)];
         }
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS)) as $entry) {
+            if ($entry->isLink()) throw new KfError('轉換結果包含不允許的連結。', 422);
+        }
+        if (kf_disk_bytes($dir) > $config['max_job_disk_bytes']) throw new KfError('轉換結果過大。', 413);
         kf_save($dir, $manifest);
         return $manifest;
     } catch (Throwable $e) { kf_remove($dir); throw $e; }
-    finally { if ($workerLock) { flock($workerLock, LOCK_UN); fclose($workerLock); } }
+    finally { if ($workerLock) { flock($workerLock, LOCK_UN); fclose($workerLock); } fclose($capacityLock); }
 }
 
 function kf_archive(string $ownerDir, array $ids, array $config): array
@@ -281,6 +340,9 @@ function kf_archive(string $ownerDir, array $ids, array $config): array
         $meta = substr($old, 0, -4) . '.json';
         if (is_file($meta)) unlink($meta);
     }
+    $estimated = 65536;
+    foreach ($manifests as $manifest) foreach ($manifest['outputs'] as $file) $estimated += (int)ceil($file['size'] * 1.01) + 1024;
+    $capacityLock = kf_capacity_lock(dirname($ownerDir), $ownerDir, $config, $estimated);
     $id = bin2hex(random_bytes(16));
     $archive = $ownerDir . '/bundle-' . $id . '.zip';
     $zip = new ZipArchive();
@@ -302,6 +364,7 @@ function kf_archive(string $ownerDir, array $ids, array $config): array
         }
         if (!$zip->close()) throw new KfError('ZIP 建立失敗，請重試。', 503);
     } catch (Throwable $e) { @$zip->close(); if (is_file($archive)) unlink($archive); throw $e; }
+    finally { fclose($capacityLock); }
     $name = count($manifests) === 1 ? $manifests[0]['name'] . '.zip' : 'KhaiFile.zip';
     file_put_contents($ownerDir . '/bundle-' . $id . '.json', json_encode(['name'=>$name, 'created'=>time()], JSON_THROW_ON_ERROR));
     return ['bundle'=>$id, 'name'=>$name];
@@ -309,11 +372,16 @@ function kf_archive(string $ownerDir, array $ids, array $config): array
 
 function kf_send(string $path, string $name): never
 {
-    if (!is_file($path)) throw new KfError('檔案已到期，請重新上傳。', 410);
+    $stream = @fopen($path, 'rb');
+    if (!$stream) throw new KfError('檔案已到期，請重新上傳。', 410);
+    // 先開啟檔案再釋放目錄鎖：刪除不會中斷已開啟的下載。
+    global $ownerLock;
+    if (is_resource($ownerLock)) { flock($ownerLock, LOCK_UN); fclose($ownerLock); }
     header('Content-Type: application/octet-stream');
     header('Content-Disposition: attachment; filename="download.'.pathinfo($name, PATHINFO_EXTENSION).'"; filename*=UTF-8\'\'' . rawurlencode($name));
-    header('Content-Length: ' . filesize($path));
+    header('Content-Length: ' . fstat($stream)['size']);
     header('Cache-Control: private, no-store');
-    readfile($path);
+    fpassthru($stream);
+    fclose($stream);
     exit;
 }

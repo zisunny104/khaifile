@@ -1,6 +1,6 @@
 # 授權盤點
 
-檢查日期：2026-10-07。以下區分本儲存庫散布的資產與另外安裝的伺服器工具。
+文件核對日期：2026-10-08（依儲存庫授權檔及本機套件告知核對，非重新驗證所有上游來源）。以下區分本儲存庫散布的資產與另外安裝的伺服器工具。
 
 | 元件 | 已確認授權 | 本專案處理方式 |
 | --- | --- | --- |
@@ -11,13 +11,15 @@
 | Font Awesome Free 6.7.2 | 字型 SIL OFL 1.1；CSS／程式碼 MIT | 由 TTF metadata 確認版本，保留該版本完整授權檔 |
 | LibreOffice | MPL 2.0，加上各內嵌第三方條款 | 獨立 CLI 安裝，未複製到本儲存庫 |
 | Ghostscript 10.05.1（驗證機套件） | AGPL-3.0-or-later | 獨立 CLI 安裝，未複製到本儲存庫 |
+| Bubblewrap | LGPL-2.1-or-later | 由系統套件安裝，未複製到本儲存庫 |
+| util-linux（prlimit） | 依套件各元件授權 | 由系統套件安裝，未複製到本儲存庫 |
 | Noto CJK（建議字型） | SIL OFL 1.1 | 由系統套件安裝；本儲存庫不散布 |
 
 ## 本儲存庫的散布
 
 MIT 元件須保留版權與授權告知；不要因壓縮 JavaScript／CSS 而把相應授權檔
-從發布內容移除。Tocas 的 MIT 授權不取代其內嵌元件的原始條款，因此這次
-補齊了 Floating UI、flag-icons 與 Font Awesome 的告知。
+從發布內容移除。Tocas 的 MIT 授權不取代其內嵌元件的原始條款，本儲存庫
+已保留 Floating UI、flag-icons 與 Font Awesome 的告知。
 
 Font Awesome 圖示字型允許使用與嵌入，散布仍須保留 OFL 條款，不能把字型
 本身單獨出售。修改字型時還須遵守 Reserved Font Name 等規定；此處未修改
@@ -56,4 +58,5 @@ MIT。使用者應保有發布文件與其中圖片、字型等內容的權利�
 - [LibreOffice 授權說明](https://www.libreoffice.org/about-us/licenses/)
 - [Ghostscript 授權說明](https://www.ghostscript.com/licensing/)
 - [GNU AGPL 第 13 節](https://www.gnu.org/licenses/agpl-3.0.html#section13)
+- 本機 `/usr/share/doc/bubblewrap/copyright`、`/usr/share/doc/util-linux/copyright`
 - 本驗證機的 LibreOffice `LICENSE`、`/usr/share/doc/ghostscript/copyright`、`/usr/share/doc/fonts-noto-cjk/copyright`
