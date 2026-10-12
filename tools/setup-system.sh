@@ -129,7 +129,7 @@ configure_custom_fpm() {
         return 1
     fi
     rm -f "$restore"
-    [[ "$(readlink -f "/proc/$CUSTOM_PID/exe")" == "$CUSTOM_BIN" ]] || { echo 'FPM 程序已變更，未重載。' >&2; return 1; }
+    [[ "$(readlink -f "/proc/$CUSTOM_PID/exe")" == "$CUSTOM_BIN" ]] || { echo 'FPM 行程已變更，未重載。' >&2; return 1; }
     kill -USR2 "$CUSTOM_PID"
     echo "  ✓ 已設定並平滑重載自編 PHP-FPM：$CUSTOM_CONFIG"
 }

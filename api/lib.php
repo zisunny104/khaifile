@@ -181,7 +181,7 @@ function kf_run(array $command, string $dir, int $timeout, array $config = []): 
         clearstatcache();
         if (kf_disk_bytes($dir) > $config['max_job_disk_bytes']) {
             $quotaExceeded = true;
-            // timeout 收到 TERM 會終止整個程序群組，包括隔離內的子程序。
+            // timeout 收到 TERM 會終止整個行程群組，包括隔離內的子行程。
             proc_terminate($process);
             break;
         }
