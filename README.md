@@ -56,7 +56,7 @@ cd /workspace/khaifile
 自動部署會將暫存路徑、LibreOffice 與 Ghostscript 的絕對路徑寫入
 `config.local.php`，暫存預設位於 `/var/lib/khaifile/<專案路徑雜湊>`。
 暫存目錄必須在網站根目錄之外，供 PHP 執行身分寫入。Tocas UI 5.7.0 與
-圖示已固定版本放在 `vendor/tocas/`，無 npm 建置或 CDN 啟動依賴。
+圖示已固定版本放在 `vendor/tocas/`，無 npm 建置或 CDN 啟動相依。
 
 ## 檢查
 
@@ -83,14 +83,14 @@ Git 部署測試同樣明確停用隔離，只驗證部署流程；系統設定�
 
 ## 部署與維運
 
-`./deploy.sh` 先檢查本機變更，取得遠端版本並快轉更新程式，接著設定
-主機環境與檢查網站。本機與遠端分歧時會停止，不重設本機版本。
+`./deploy.sh` 先檢查本機變更，取得 remote 版本並 fast-forward 更新程式，接著設定
+主機環境與檢查網站。本機與 remote diverge 時會停止，不重設本機版本。
 部署及 `--check-only` 不執行 PHP／JavaScript 語法檢查或完整測試；
-請在提交前或 CI 執行上方的檢查工具。
-正常部署在 Debian／Ubuntu 透過 root／sudo 補齊缺少的依賴，設定使用中的
+請在 commit 前或 CI 執行上方的檢查工具。
+正常部署在 Debian／Ubuntu 透過 root／sudo 補齊缺少的相依套件，設定使用中的
 PHP-FPM 上傳至少 50 MB、請求至少 52 MB、執行時間至少 300 秒，保留較大的
 既有設定。會建立網站之外的暫存目錄與每五分鐘清理排程，重複部署不新增排程。
-只更新 KhaiFile，不會同步其他子專案；子模組的 detached HEAD 也可快轉更新。
+只更新 KhaiFile，不會同步其他子專案；submodule 的 detached HEAD 也可 fast-forward 更新。
 
 ```sh
 ./deploy.sh --check-deps
@@ -123,9 +123,9 @@ PHP-FPM 上傳至少 50 MB、請求至少 52 MB、執行時間至少 300 秒，�
 將 `config.php` 等不存在的工具子路徑當成正常頁面。
 
 放入 KoiLiSu 的 `apps/khaifile` 後，工具入口為 `/koilisu/khaifile`，
-靜態資源位於 `/koilisu/apps/khaifile/`。母專案已加入 KhaiFile 子模組。
+靜態資源位於 `/koilisu/apps/khaifile/`。母專案已加入 KhaiFile submodule。
 若其他工具在 VPS 有較新的進度，可只在 `apps/khaifile` 內部署此工具，
-保留其他工具的版本；母專案同步時會快轉較舊版本、保留同一歷史較新的提交，分歧時中止。
+保留其他工具的版本；母專案同步時會 fast-forward 較舊版本、保留同一歷史較新的 commit，diverge 時中止。
 
 PHP-FPM 可使用 `.user.ini`；PHP CLI 請使用上方 `-d` 參數。反向代理的
 請求內容大小限制至少須為 52 MB。部署腳本設定 PHP 執行時間至少 300 秒，
@@ -151,7 +151,7 @@ root）。這不是整個程序樹的
 則依原本流程保留原 PDF。正常自動設定會以 PHP 執行帳號，在 PHP CLI
 下啟動隔離的 `/usr/bin/true` 檢查；這不等於已驗證 PHP-FPM 實際請求或
 隔離內的 LibreOffice／Ghostscript 轉換。`--check-only`、`--check-deps`
-及略過系統設定時，依賴檢查以執行指令的帳號進行。主機必須允許 Bubblewrap 使用核心命名空間，部署腳本
+及略過系統設定時，相依性檢查以執行指令的帳號進行。主機必須允許 Bubblewrap 使用核心命名空間，部署腳本
 不會放寬全機安全政策。PHP CLI 開發伺服器供本機驗證。
 
 部署腳本自動建立定期清理，避免無後續請求時的到期檔案停留。
@@ -179,4 +179,4 @@ LibreOffice 轉換可能改變複雜排版、字型、公式或試算表列印�
 
 MIT；第三方元件與伺服器工具依各自授權使用，詳見 LICENSE。
 完整盤點見 [授權說明](docs/LICENSING.md)，包含 Ghostscript 的 AGPL 條款與
-另行打包伺服器依賴時的注意事項。
+另行打包伺服器相依性時的注意事項。

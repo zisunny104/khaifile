@@ -44,13 +44,13 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             cat <<'HELP'
 用法：./deploy.sh [--check-only | --check-deps | --set-check-url URL]
-預設：檢查依賴與乾淨工作目錄，fetch、fast-forward 更新，再檢查網站。
---check-only    檢查依賴與網站，不更新 Git。
---check-deps    只檢查伺服器依賴與暫存目錄。
+預設：檢查相依性與乾淨工作目錄，fetch、fast-forward 更新，再檢查網站。
+--check-only    檢查相依性與網站，不更新 Git。
+--check-deps    只檢查伺服器相依性與暫存目錄。
 --set-check-url 儲存網站網址；DEPLOY_CHECK_URL 可覆蓋。
 環境變數：DEPLOY_BRANCH（main）、DEPLOY_CHECK_URL、DEPLOY_RELOAD_CMD。
 工具路徑：KHAIFILE_OFFICE_BIN、KHAIFILE_GS_BIN、KHAIFILE_TEMP_DIR。
-正常部署會補齊 Debian／Ubuntu 依賴、PHP-FPM 限制與清理排程（需要 root／sudo）。
+正常部署會補齊 Debian／Ubuntu 相依套件、PHP-FPM 限制與清理排程（需要 root／sudo）。
 DEPLOY_SETUP_SYSTEM=0 可略過；DEPLOY_PHP_USER 可指定網站 PHP 帳號。
 會偵測運行中的自編 FPM；多個版本可用 DEPLOY_FPM_CONFIG 指定。
 DEPLOY_NGINX_SITE 可指定既有開利手網站設定，加入 KhaiFile 私有路徑拒絕規則與限速。
@@ -63,7 +63,7 @@ HELP
 done
 
 if [[ "$deps_only" -eq 1 ]]; then
-    step '檢查執行期依賴'
+    step '檢查執行期相依性'
     command -v php >/dev/null || abort '需要 PHP CLI 8.2+。'
     run_logged 'PHP、轉換工具與暫存目錄正常' php tools/deps.php
     exit 0
@@ -113,23 +113,23 @@ fi
 
 step '檢查本機變更'
 command -v git >/dev/null || abort '需要 Git。'
-git rev-parse --verify HEAD >/dev/null 2>&1 || abort '尚無提交，請先建立初始 commit。'
-[[ -z "$(git status --porcelain --untracked-files=no)" ]] || abort '有尚未提交的修改，部署已中止。'
+git rev-parse --verify HEAD >/dev/null 2>&1 || abort '尚無 commit，請先建立初始 commit。'
+[[ -z "$(git status --porcelain --untracked-files=no)" ]] || abort '有尚未 commit 的修改，部署已中止。'
 branch="${DEPLOY_BRANCH:-main}"
 git check-ref-format "refs/heads/$branch" || abort 'DEPLOY_BRANCH 無效。'
-# 子模組由母專案初始化時通常是 detached HEAD；只允許向指定遠端分支快轉。
+# submodule 由母專案初始化時通常是 detached HEAD；只允許向指定 remote branch fast-forward。
 current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
-[[ -z "$current_branch" || "$current_branch" == "$branch" ]] || abort "請先切換到 $branch 分支。"
-ok '沒有未提交的修改'
+[[ -z "$current_branch" || "$current_branch" == "$branch" ]] || abort "請先切換到 $branch branch。"
+ok '沒有未 commit 的修改'
 command -v php >/dev/null || abort '需要 PHP CLI 8.2+。'
 php -r 'exit(PHP_VERSION_ID>=80200?0:1);' || abort '需要 PHP CLI 8.2+。'
 ok "PHP CLI：$(php -r 'echo PHP_VERSION;')"
 
-step '取得遠端版本'
-run_logged '已取得遠端版本' git fetch origin "refs/heads/$branch"
+step '取得 remote 版本'
+run_logged '已取得 remote 版本' git fetch origin "refs/heads/$branch"
 target="$(git rev-parse --verify 'FETCH_HEAD^{commit}')"
 before="$(git rev-parse --short HEAD)"
-git merge-base --is-ancestor HEAD "$target" || abort '本機與遠端版本已分歧，無法快轉更新。'
+git merge-base --is-ancestor HEAD "$target" || abort '本機與 remote 版本已 diverge，無法 fast-forward 更新。'
 
 step '更新程式'
 
@@ -151,7 +151,7 @@ else
     warn '已略過系統設定（DEPLOY_SETUP_SYSTEM=0）'
     run_logged 'PHP、轉換工具與暫存目錄正常' php tools/deps.php
 fi
-# 系統設定已用實際 PHP 身分檢查依賴；部署帳號不需取得私人暫存寫入權限。
+# 系統設定已用實際 PHP 身分檢查相依性；部署帳號不需取得私人暫存寫入權限。
 if [[ -n "${DEPLOY_RELOAD_CMD:-}" ]]; then
     run_logged '服務已重載' bash -lc "$DEPLOY_RELOAD_CMD"
 fi

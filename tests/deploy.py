@@ -84,7 +84,7 @@ with tempfile.TemporaryDirectory(prefix='khaifile-deploy-') as temp:
     with (checkout / 'README.md').open('a') as output:
         output.write('\nLocal edit\n')
     result = run(['bash', 'deploy.sh'], checkout, environment)
-    check(result.returncode != 0 and '尚未提交' in result.stdout, 'Dirty working tree is preserved')
+    check(result.returncode != 0 and '尚未 commit' in result.stdout, 'Dirty working tree is preserved')
     git(checkout, 'restore', '--worktree', 'README.md')
     git(checkout, 'config', 'user.name', 'KhaiFile test')
     git(checkout, 'config', 'user.email', 'test@localhost')
@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory(prefix='khaifile-deploy-') as temp:
     git(checkout, 'add', 'local.txt')
     git(checkout, 'commit', '-m', 'Local-only commit')
     result = run(['bash', 'deploy.sh'], checkout, environment)
-    check(result.returncode != 0 and '分歧' in result.stdout, 'Divergent branch is not reset or merged')
+    check(result.returncode != 0 and 'diverge' in result.stdout, 'Divergent branch is not reset or merged')
     router = directory / 'router.php'
     router.write_text('<?php $p=parse_url($_SERVER["REQUEST_URI"],PHP_URL_PATH); if ($p==="/config.php") {echo "exposed";} elseif(str_contains($p,".git") || str_contains($p,"api/") || str_contains($p,"tools/")) {http_response_code(403);} else {echo \'KhaiFile <link href="/vendor/tocas/tocas.min.css">\';}')
     with socket.socket() as sock:

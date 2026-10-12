@@ -26,7 +26,7 @@ Font Awesome 圖示字型允許使用與嵌入，散布仍須保留 OFL 條款�
 字型。本專案未散布 Font Awesome SVG 圖示；上游完整授權檔亦記載 SVG
 圖示的 CC BY 4.0 條款，新增 SVG 資產時需重新盤點。
 
-## 伺服器依賴
+## 伺服器相依性
 
 **Ghostscript 不是 MIT 元件。** 驗證機的 Debian 套件明列
 AGPL-3.0-or-later；Artifex 另提供商業授權。KhaiFile 以獨立 subprocess
@@ -52,7 +52,7 @@ MIT。使用者應保有發布文件與其中圖片、字型等內容的權利�
 
 - [Tocas UI 5.7.0 原始授權](https://github.com/teacat/tocas/blob/5.7.0/LICENSE)
 - [Tocas 內嵌 Floating UI 原始檔](https://github.com/teacat/tocas/blob/5.7.0/src/scripts/tocas.floating-ui.js)
-- [Floating UI 1.2.2 npm 套件](https://www.npmjs.com/package/@floating-ui/dom/v/1.2.2)：下載時已驗證 registry 的 SRI 摘要
+- [Floating UI 1.2.2 npm 套件](https://www.npmjs.com/package/@floating-ui/dom/v/1.2.2)：下載時已驗證 registry 的 SRI 雜湊
 - [flag-icons 原始授權](https://github.com/lipis/flag-icons/blob/main/LICENSE)
 - [Font Awesome 6.7.2 完整授權](https://github.com/FortAwesome/Font-Awesome/blob/6.7.2/LICENSE.txt)
 - [LibreOffice 授權說明](https://www.libreoffice.org/about-us/licenses/)
